@@ -1,0 +1,3 @@
+id,store_name,url,comment,score,region,city,business_type,site_type,phone,email,source_query,fetched_at_iso
+03000,Test Salon,https://example.com/test,△ minor SEO,75,tokyo,Shinjuku,Counseling,brochure,03-0000-0000,info@example.com,query1,2026-01-18T00:00:00
+03001,Another Salon,https://example.org,△ UX issue,60,tokyo,Shibuya,Coaching,landing,03-1111-1111,hello@example.org,query2,2026-01-18T00:00:00

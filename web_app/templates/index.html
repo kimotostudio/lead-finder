@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lead Finder Pro | 全国対応リード発掘ツール</title>
+    <meta name="description" content="全国47都道府県対応。個人事業主・小規模事業者のウェブサイトを効率的に発掘し、営業リストを自動生成します。">
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <!-- Google Fonts - Inter + Noto Sans JP -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Header -->
+    <header class="app-header">
+        <div class="container">
+            <nav class="navbar">
+                <a class="navbar-brand" href="/" style="text-decoration:none;">
+                    <div style="display:flex;align-items:center;gap:var(--space-3);">
+                        <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                            <rect width="36" height="36" rx="10" fill="url(#logo-gradient)"/>
+                            <path d="M18 10L26 22H10L18 10Z" fill="white" fill-opacity="0.95"/>
+                            <defs>
+                                <linearGradient id="logo-gradient" x1="0" y1="0" x2="36" y2="36">
+                                    <stop offset="0%" stop-color="#6366F1"/>
+                                    <stop offset="100%" stop-color="#4F46E5"/>
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                        <span class="logo-text">Lead Finder</span>
+                    </div>
+                    <span class="badge-pro">AI搭載</span>
+                </a>
+                <div class="navbar-stats">
+                    <div class="stat-pill">
+                        <i class="bi bi-geo-alt-fill"></i>
+                        <span>47都道府県</span>
+                    </div>
+                    <div class="stat-pill">
+                        <i class="bi bi-buildings"></i>
+                        <span>778都市</span>
+                    </div>
+                </div>
+            </nav>
+        </div>
+    </header>
+
+    <main class="container py-4">
+        <!-- Hero Section -->
+        <section class="hero">
+            <div class="hero-eyebrow">
+                <i class="bi bi-stars"></i>
+                AIによる高精度リード発掘
+            </div>
+            <h1 class="hero-title">
+                全国のリードを<br>
+                <span class="gradient-text">AIで発見</span>
+            </h1>
+            <p class="hero-description">
+                47都道府県・778都市から、個人事業主や小規模事業者を効率的に抽出。<br>
+                GPT-4o-miniによるAI検証で、質の高いリストを生成します。
+            </p>
+
+            <div class="hero-features">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="bi bi-geo-alt-fill"></i>
+                    </div>
+                    <div class="feature-content">
+                        <div class="feature-value">778</div>
+                        <div class="feature-label">対応都市</div>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="bi bi-person-check-fill"></i>
+                    </div>
+                    <div class="feature-content">
+                        <div class="feature-value">個人事業主</div>
+                        <div class="feature-label">優先抽出</div>
+                    </div>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="bi bi-robot"></i>
+                    </div>
+                    <div class="feature-content">
+                        <div class="feature-value">AI検証</div>
+                        <div class="feature-label">GPT-4o-mini</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Search Panel -->
+        <section class="search-section">
+        <div class="search-panel">
+            <div class="panel-header">
+                <div class="panel-header-content">
+                    <h2 class="panel-title">
+                        <span class="title-icon">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        検索条件を設定
+                    </h2>
+                    <p class="panel-subtitle">地域と業種を選択してリストを生成</p>
+                </div>
+            </div>
+            <div class="panel-body">
+                <form id="searchForm">
+                    <!-- Step 1: Location Selection -->
+                    <div class="form-section">
+                        <div class="section-header">
+                            <span class="step-number">1</span>
+                            <h6 class="section-title">エリアを選択</h6>
+                        </div>
+
+                        <div class="row g-4">
+                            <!-- Region -->
+                            <div class="col-md-4">
+                                <label class="form-label">
+                                    地方
+                                    <span class="text-danger">*</span>
+                                </label>
+                                <select class="form-select form-select-lg" id="regionSelect" name="region">
+                                    <option value="">地方を選択...</option>
+                                    {% for region in regions.keys() %}
+                                    <option value="{{ region }}">{{ region }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Prefecture -->
+                            <div class="col-md-4" id="prefectureSection" style="display: none;">
+                                <label class="form-label">
+                                    都道府県
+                                    <span class="text-danger">*</span>
+                                </label>
+                                <select class="form-select form-select-lg" id="prefectureSelect" name="prefecture">
+                                    <option value="">都道府県を選択...</option>
+                                </select>
+                            </div>
+
+                            <!-- City count indicator -->
+                            <div class="col-md-4 d-flex align-items-end" id="cityCountSection" style="display: none;">
+                                <div class="alert alert-info mb-0 w-100">
+                                    <i class="bi bi-building me-2"></i>
+                                    <span id="cityCountText">0件の都市が選択可能</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- City Selection -->
+                        <div class="mt-4" id="citySection" style="display: none;">
+                            <label class="form-label">
+                                都市を選択
+                                <span class="text-danger">*</span>
+                                <span class="form-label-badge">複数選択可</span>
+                            </label>
+                            <div class="city-selection-wrapper">
+                                <div class="city-selection-header">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="selectAllCities">
+                                        <label class="form-check-label fw-semibold" for="selectAllCities">
+                                            すべて選択
+                                        </label>
+                                    </div>
+                                    <span class="text-muted" id="selectedCityCount">0件選択中</span>
+                                </div>
+                                <div id="citySelection" class="city-grid">
+                                    <!-- Dynamically populated -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Business Type Selection -->
+                    <div class="form-section">
+                        <div class="section-header">
+                            <span class="step-number">2</span>
+                            <h6 class="section-title">業種を選択</h6>
+                        </div>
+
+                        <div class="business-type-categories">
+                            {% for category in business_type_categories %}
+                            <div class="business-category" data-category="{{ category.id }}">
+                                <div class="business-category-header" data-bs-toggle="collapse"
+                                     data-bs-target="#category-{{ category.id }}" aria-expanded="true">
+                                    <div class="category-title">
+                                        <i class="bi {{ category.icon }}"></i>
+                                        <span>{{ category.name }}</span>
+                                        <span class="category-count badge bg-secondary ms-2" style="display:none;"></span>
+                                    </div>
+                                    <div class="category-actions">
+                                        <button type="button" class="btn btn-sm btn-link select-category-all p-0"
+                                                data-category="{{ category.id }}">全選択</button>
+                                        <i class="bi bi-chevron-down collapse-icon ms-2"></i>
+                                    </div>
+                                </div>
+                                <div class="collapse show" id="category-{{ category.id }}">
+                                    <div class="business-type-grid">
+                                        {% for btype in category.types %}
+                                        <div class="form-check business-type-item">
+                                            <input class="form-check-input" type="checkbox" name="business_type"
+                                                   value="{{ btype }}" id="btype-{{ category.id }}-{{ loop.index }}"
+                                                   data-category="{{ category.id }}">
+                                            <label class="form-check-label" for="btype-{{ category.id }}-{{ loop.index }}">
+                                                {{ btype }}
+                                            </label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="mt-4 d-flex gap-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="selectAllBusinessTypes">
+                                <i class="bi bi-check-all"></i> すべて選択
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="clearBusinessTypes">
+                                <i class="bi bi-x-lg"></i> クリア
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Search Target -->
+                    <div class="form-section">
+                        <div class="section-header">
+                            <span class="step-number">3</span>
+                            <h6 class="section-title">ターゲット設定</h6>
+                        </div>
+
+                        <div class="preset-buttons">
+                            <button type="button" class="btn btn-preset active" data-preset="solo">
+                                <i class="bi bi-person-fill"></i>
+                                <span>個人事業主優先</span>
+                                <small>弱いサイトを重点的に収集</small>
+                            </button>
+                            <button type="button" class="btn btn-preset" data-preset="small">
+                                <i class="bi bi-people-fill"></i>
+                                <span>小規模事業者</span>
+                                <small>個人〜小規模をバランスよく</small>
+                            </button>
+                            <button type="button" class="btn btn-preset" data-preset="all">
+                                <i class="bi bi-grid-fill"></i>
+                                <span>全規模対象</span>
+                                <small>法人含め幅広く収集</small>
+                            </button>
+                        </div>
+
+
+                        <!-- Advanced Settings (Collapsible) -->
+                        <div class="mt-5">
+                            <button class="btn btn-outline-secondary btn-sm" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#advancedFilters">
+                                <i class="bi bi-sliders me-1"></i>
+                                詳細設定
+                                <i class="bi bi-chevron-down ms-1"></i>
+                            </button>
+                        </div>
+
+                        <div class="collapse mt-4" id="advancedFilters">
+                            <div class="row g-4">
+                                <!-- Results Limit -->
+                                <div class="col-md-6">
+                                    <label class="form-label">
+                                        <i class="bi bi-list-ol"></i> 取得件数（1クエリあたり）
+                                    </label>
+                                    <select class="form-select" id="limitSelect" name="limit">
+                                        <option value="5">5件（最速）</option>
+                                        <option value="10">10件（高速）</option>
+                                        <option value="20">20件（少なめ）</option>
+                                        <option value="50" selected>50件（標準）</option>
+                                        <option value="100">100件（最大）</option>
+                                    </select>
+                                </div>
+
+                                <!-- Business Scale Filter -->
+                                <div class="col-md-6">
+                                    <label class="form-label">
+                                        <i class="bi bi-building"></i> 対象の事業規模
+                                    </label>
+                                    <div class="scale-filter-grid">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox"
+                                                   name="solo_classification" value="solo"
+                                                   id="solo-class-solo" checked>
+                                            <label class="form-check-label" for="solo-class-solo">
+                                                <span class="badge bg-success">個人</span>
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox"
+                                                   name="solo_classification" value="small"
+                                                   id="solo-class-small" checked>
+                                            <label class="form-check-label" for="solo-class-small">
+                                                <span class="badge bg-info">小規模</span>
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox"
+                                                   name="solo_classification" value="unknown"
+                                                   id="solo-class-unknown" checked>
+                                            <label class="form-check-label" for="solo-class-unknown">
+                                                <span class="badge bg-secondary">不明</span>
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox"
+                                                   name="solo_classification" value="corporate"
+                                                   id="solo-class-corporate">
+                                            <label class="form-check-label" for="solo-class-corporate">
+                                                <span class="badge bg-dark">法人</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Lead Score (MIN only) -->
+                                <div class="col-md-6">
+                                    <div class="filter-card">
+                                        <label class="form-label">
+                                            <i class="bi bi-speedometer2 text-primary"></i>
+                                            営業優先度 (Lead Score)
+                                        </label>
+                                        <small class="text-muted d-block mb-3">最低スコアを設定（高い＝営業チャンス大）</small>
+                                        <div class="row g-2 mb-3">
+                                            <div class="col-6">
+                                                <div class="input-group input-group-sm">
+                                                    <span class="input-group-text">最低</span>
+                                                    <input type="number" class="form-control" id="minScoreInput"
+                                                           min="0" max="100" step="10" value="10">
+                                                </div>
+                                            </div>
+                                            <div class="col-6">
+                                                <input type="number" class="form-control form-control-sm" id="maxScoreInput"
+                                                       min="0" max="100" step="10" placeholder="最高(任意)"
+                                                       style="display:none;">
+                                            </div>
+                                        </div>
+                                        <input type="range" class="form-range" min="0" max="100" step="10"
+                                               value="10" id="minScoreRange">
+                                        <div class="range-labels">
+                                            <span>0</span>
+                                            <span>現在: <strong id="minScoreValue">10</strong></span>
+                                            <span>100</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Weakness Filter -->
+                                <div class="col-md-6">
+                                    <div class="filter-card">
+                                        <label class="form-label">
+                                            <i class="bi bi-graph-down text-danger"></i>
+                                            サイトの弱さ
+                                        </label>
+                                        <small class="text-muted d-block mb-3">高いほど営業チャンス大（デザインが古い、情報不足など）</small>
+                                        <input type="range" class="form-range" id="minWeakness"
+                                               min="0" max="100" value="0" step="5">
+                                        <div class="range-labels">
+                                            <span>0（すべて）</span>
+                                            <span>現在: <strong id="minWeaknessValue">0</strong></span>
+                                            <span>100（弱いのみ）</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Solo Score Range -->
+                                <div class="col-md-6">
+                                    <label class="form-label">
+                                        <i class="bi bi-person-badge"></i> 個人事業主らしさスコア
+                                    </label>
+                                    <small class="text-muted d-block mb-2">高いほど個人事業主の可能性大</small>
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <input type="number" class="form-control form-control-sm"
+                                                   id="soloScoreMin" placeholder="最低" min="-999" max="100">
+                                        </div>
+                                        <div class="col-6">
+                                            <input type="number" class="form-control form-control-sm"
+                                                   id="soloScoreMax" placeholder="最高" min="-999" max="100">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- AI Relevance Gate -->
+                                <div class="col-12">
+                                    <div class="ai-verification-card">
+                                        <div class="ai-icon">
+                                            <i class="bi bi-funnel-fill text-success"></i>
+                                        </div>
+                                        <div class="ai-content">
+                                            <div class="ai-header">
+                                                <span class="ai-title">
+                                                    <i class="bi bi-shield-check text-success"></i>
+                                                    AIで関係ないサイトを除外（おすすめ）
+                                                </span>
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="useAiRelevance" checked>
+                                                </div>
+                                            </div>
+                                            <p class="ai-description">
+                                                海外サイト・ポータル・SNS・無関係業種をAIで自動判別し、クロール前に除外します。
+                                            </p>
+                                            <div id="aiRelevanceTopNContainer" style="display: none;">
+                                                <label class="form-label small">チェックする件数</label>
+                                                <select class="form-select form-select-sm" id="aiRelevanceTopN">
+                                                    <option value="10">10件</option>
+                                                    <option value="20">20件</option>
+                                                    <option value="30" selected>30件</option>
+                                                    <option value="50">50件</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- AI Verification -->
+                                <div class="col-12">
+                                    <div class="ai-verification-card">
+                                        <div class="ai-icon">
+                                            <i class="bi bi-robot text-primary"></i>
+                                        </div>
+                                        <div class="ai-content">
+                                            <div class="ai-header">
+                                                <span class="ai-title">
+                                                    <i class="bi bi-stars text-warning"></i>
+                                                    AI検証（GPT-4o-mini）
+                                                </span>
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="useAiVerify">
+                                                </div>
+                                            </div>
+                                            <p class="ai-description">
+                                                上位リードをAIで再チェックし、本当に営業しやすいサイトかを判定します。
+                                            </p>
+                                            <div id="aiTopNContainer" style="display: none;">
+                                                <label class="form-label small">検証する件数</label>
+                                                <select class="form-select form-select-sm" id="aiTopN">
+                                                    <option value="10">10件（約0.2円）</option>
+                                                    <option value="20">20件（約0.4円）</option>
+                                                    <option value="30" selected>30件（約0.6円）</option>
+                                                    <option value="50">50件（約1円）</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hidden inputs for score range -->
+                    <input type="hidden" id="minScoreRangeHidden" name="min_score" value="10">
+                    <input type="hidden" id="maxScoreRangeHidden" name="max_score" value="100">
+
+                    <!-- Submit Button -->
+                    <div class="d-grid">
+                        <button type="submit" class="btn-primary-large" id="searchBtn">
+                            <span class="btn-content">
+                                <i class="bi bi-search"></i>
+                                <span>検索を開始</span>
+                            </span>
+                            <span class="btn-loading-content">
+                                <span class="spinner-border spinner-border-sm"></span>
+                                検索中...
+                            </span>
+                            <span class="btn-shimmer"></span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        </section>
+
+        <!-- Progress Section -->
+        <div id="progressSection" class="card mb-4" style="display: none;">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between mb-4">
+                    <div class="d-flex align-items-center">
+                        <div class="spinner-border text-primary me-3" id="progressSpinner"></div>
+                        <div>
+                            <h5 class="mb-1 fw-bold" id="progressTitle">検索中...</h5>
+                            <p class="mb-0 text-muted" id="progressMessage">準備中...</p>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-outline-danger" id="cancelSearchBtn">
+                        <i class="bi bi-x-lg me-1"></i>
+                        中止
+                    </button>
+                </div>
+                <div class="progress mb-3" style="height: 12px;">
+                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                         role="progressbar" style="width: 0%">
+                        <span id="progressPercent">0%</span>
+                    </div>
+                </div>
+                <div class="text-end">
+                    <small id="progressStats" class="text-muted"></small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" style="display: none;">
+            <div class="card">
+                <div class="card-header" style="background: linear-gradient(135deg, var(--success-light), white);">
+                    <div class="results-header">
+                        <div>
+                            <h5 class="results-title">
+                                <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                <span class="count" id="totalLeadsCount">0</span>件のリードを発見
+                            </h5>
+                            <p class="results-subtitle">営業優先度順に並んでいます（○→△→×）</p>
+                        </div>
+                        <button id="downloadBtn" class="btn btn-success">
+                            <i class="bi bi-download me-1"></i>
+                            CSVダウンロード
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Results Summary -->
+                    <div id="resultsSummary" class="results-summary">
+                        <div class="row g-3">
+                            <div class="col-6 col-md-3">
+                                <div class="summary-card">
+                                    <div class="summary-value text-primary" id="totalLeadsCountSummary">0</div>
+                                    <div class="summary-label">総リード数</div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="summary-card">
+                                    <div class="summary-value text-success" id="soloCount">0</div>
+                                    <div class="summary-label">個人事業主</div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="summary-card">
+                                    <div class="summary-value text-info" id="smallCount">0</div>
+                                    <div class="summary-label">小規模事業者</div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="summary-card">
+                                    <div class="summary-value text-warning" id="avgWeakness">0</div>
+                                    <div class="summary-label">平均弱さスコア</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filter tabs -->
+                    <div class="filter-tabs-wrapper" id="resultFilterTabs">
+                        <button class="filter-tab active" data-filter="all">
+                            すべて <span class="filter-count" id="filterAllCount">0</span>
+                        </button>
+                        <button class="filter-tab" data-filter="solo">
+                            <i class="bi bi-person-fill"></i> 個人
+                            <span class="filter-count success" id="filterSoloCount">0</span>
+                        </button>
+                        <button class="filter-tab" data-filter="small">
+                            <i class="bi bi-people-fill"></i> 小規模
+                            <span class="filter-count info" id="filterSmallCount">0</span>
+                        </button>
+                        <button class="filter-tab" data-filter="weak">
+                            <i class="bi bi-graph-down"></i> 弱いサイト
+                            <span class="filter-count danger" id="filterWeakCount">0</span>
+                        </button>
+                    </div>
+
+                    <!-- Results Grid -->
+                    <div id="resultsContainer" class="results-grid">
+                        <!-- Results cards will be inserted here -->
+                    </div>
+
+                    <!-- Empty State -->
+                    <div id="emptyState" class="empty-state" style="display: none;">
+                        <i class="bi bi-inbox"></i>
+                        <h5>検索結果がありません</h5>
+                        <p class="text-muted">条件を変更して再度検索してください</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Section -->
+        <div id="errorSection" class="alert alert-danger" style="display: none;" role="alert">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-exclamation-triangle-fill me-3 fs-4"></i>
+                <div>
+                    <h6 class="mb-1 fw-bold">エラーが発生しました</h6>
+                    <p class="mb-0" id="errorMessage"></p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-6 text-center text-md-start mb-3 mb-md-0">
+                    <span class="footer-brand">
+                        <i class="bi bi-bullseye me-2"></i>Lead Finder Pro
+                    </span>
+                    <span class="footer-text ms-3">&copy; 2026</span>
+                </div>
+                <div class="col-md-6 text-center text-md-end">
+                    <span class="footer-text">
+                        <i class="bi bi-geo-alt me-1"></i>
+                        全国47都道府県 | 778都市対応
+                    </span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script>
+        // Regions data from backend
+        const REGIONS = {{ regions | tojson }};
+
+        // Initialize on document ready
+        $(document).ready(function() {
+            initializeApp();
+        });
+
+        function initializeApp() {
+            // Region selection handler
+            $('#regionSelect').change(function() {
+                const region = $(this).val();
+                if (region) {
+                    loadPrefectures(region);
+                    $('#prefectureSection').fadeIn(200);
+                } else {
+                    $('#prefectureSection').hide();
+                    $('#citySection').hide();
+                    $('#cityCountSection').hide();
+                }
+            });
+
+            // Auto-select first region on page load
+            const regionOptions = $('#regionSelect option').filter(function() {
+                return $(this).val() !== '';
+            });
+            if (regionOptions.length > 0) {
+                const firstRegion = regionOptions.first().val();
+                $('#regionSelect').val(firstRegion).trigger('change');
+            }
+
+            // Prefecture selection handler
+            $('#prefectureSelect').change(function() {
+                const prefecture = $(this).val();
+                if (prefecture) {
+                    loadCities(prefecture);
+                    $('#citySection').fadeIn(200);
+                    $('#cityCountSection').fadeIn(200);
+                } else {
+                    $('#citySection').hide();
+                    $('#cityCountSection').hide();
+                }
+            });
+
+            // Select all cities handler
+            $('#selectAllCities').change(function() {
+                $('input[name="city"]').prop('checked', $(this).prop('checked'));
+                updateSelectedCityCount();
+            });
+
+            // Business type buttons
+            $('#selectAllBusinessTypes').click(function() {
+                $('input[name="business_type"]').prop('checked', true);
+            });
+
+            $('#clearBusinessTypes').click(function() {
+                $('input[name="business_type"]').prop('checked', false);
+            });
+
+            // Preset buttons
+            $('.btn-preset').click(function() {
+                $('.btn-preset').removeClass('active');
+                $(this).addClass('active');
+                applyPreset($(this).data('preset'));
+            });
+
+            // Result filter tabs
+            $('#resultFilterTabs .filter-tab').click(function() {
+                $('#resultFilterTabs .filter-tab').removeClass('active');
+                $(this).addClass('active');
+                filterResults($(this).data('filter'));
+            });
+
+            // Score slider sync
+            $('#minScoreRange').on('input', function() {
+                $('#minScoreInput').val($(this).val());
+                $('#minScoreValue').text($(this).val());
+            });
+
+            $('#minScoreInput').on('change', function() {
+                $('#minScoreRange').val($(this).val());
+                $('#minScoreValue').text($(this).val());
+            });
+
+            // Weakness slider
+            $('#minWeakness').on('input', function() {
+                $('#minWeaknessValue').text($(this).val());
+            });
+
+            // AI relevance gate toggle
+            $('#useAiRelevance').change(function() {
+                if ($(this).is(':checked')) {
+                    $('#aiRelevanceTopNContainer').fadeIn(200);
+                } else {
+                    $('#aiRelevanceTopNContainer').hide();
+                }
+            });
+
+            // AI verification toggle
+            $('#useAiVerify').change(function() {
+                if ($(this).is(':checked')) {
+                    $('#aiTopNContainer').fadeIn(200);
+                } else {
+                    $('#aiTopNContainer').hide();
+                }
+            });
+
+            // Initialize preset
+            applyPreset('solo');
+        }
+
+        function loadPrefectures(region) {
+            const prefectures = REGIONS[region];
+            const $select = $('#prefectureSelect');
+            $select.empty();
+            $select.append('<option value="">都道府県を選択...</option>');
+
+            prefectures.forEach(function(prefecture) {
+                $select.append(`<option value="${prefecture}">${prefecture}</option>`);
+            });
+
+            // Reset city selection
+            $('#citySection').hide();
+            $('#cityCountSection').hide();
+            $('#citySelection').empty();
+        }
+
+        function loadCities(prefecture) {
+            $.get(`/api/cities/${encodeURIComponent(prefecture)}`, function(data) {
+                const cities = data.cities;
+                const $container = $('#citySelection');
+                $container.empty();
+
+                $('#cityCountText').text(`${cities.length}件の都市が選択可能`);
+
+                cities.forEach(function(city, index) {
+                    $container.append(`
+                        <div class="form-check city-item">
+                            <input class="form-check-input" type="checkbox" name="city"
+                                   value="${city}" id="city-${index}">
+                            <label class="form-check-label" for="city-${index}">${city}</label>
+                        </div>
+                    `);
+                });
+
+                // Add change handler for city checkboxes
+                $('input[name="city"]').change(function() {
+                    updateSelectedCityCount();
+                });
+
+                $('#selectAllCities').prop('checked', false);
+                updateSelectedCityCount();
+            }).fail(function() {
+                showError('都市データの読み込みに失敗しました');
+            });
+        }
+
+        // updateSelectedCityCount is defined in app.js
+        // filterResults is defined in app.js with animations
+    </script>
+</body>
+</html>

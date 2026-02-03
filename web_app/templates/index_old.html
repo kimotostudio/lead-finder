@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lead Finder - リード生成システム</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-primary">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">
+                <i class="bi bi-search"></i> Lead Finder
+            </span>
+            <span class="text-white">個人経営ビジネスリード生成</span>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Search Form -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="bi bi-funnel"></i> 検索条件</h5>
+            </div>
+            <div class="card-body">
+                <form id="searchForm">
+                    <!-- Region Selection -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">地域 <span class="text-danger">*</span></label>
+                        <div class="btn-group" role="group">
+                            <input type="radio" class="btn-check" name="region" id="region-tokyo" value="東京" checked>
+                            <label class="btn btn-outline-primary" for="region-tokyo">東京</label>
+
+                            <input type="radio" class="btn-check" name="region" id="region-kanagawa" value="神奈川">
+                            <label class="btn btn-outline-primary" for="region-kanagawa">神奈川</label>
+
+                            <input type="radio" class="btn-check" name="region" id="region-saitama" value="埼玉">
+                            <label class="btn btn-outline-primary" for="region-saitama">埼玉</label>
+                        </div>
+                    </div>
+
+                    <!-- City Selection -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">都市 <span class="text-danger">*</span></label>
+                        <div id="citySelection" class="row row-cols-2 row-cols-md-3 row-cols-lg-5 g-2">
+                            <!-- Dynamically populated -->
+                        </div>
+                        <small class="text-muted">複数選択可能</small>
+                    </div>
+
+                    <!-- Business Type Selection -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">業種 <span class="text-danger">*</span></label>
+                        <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-2">
+                            {% for btype in business_types %}
+                            <div class="col">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="business_type" value="{{ btype }}" id="btype-{{ loop.index }}">
+                                    <label class="form-check-label" for="btype-{{ loop.index }}">
+                                        {{ btype }}
+                                    </label>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Search Options -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="limitSelect" class="form-label">1クエリあたりの最大取得数</label>
+                            <select class="form-select" id="limitSelect" name="limit">
+                                <option value="10" selected>10件</option>
+                                <option value="20">20件</option>
+                                <option value="50">50件</option>
+                                <option value="100">100件</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="minScoreRange" class="form-label">
+                                最低スコア: <span id="minScoreValue">40</span>
+                            </label>
+                            <input type="range" class="form-range" min="0" max="100" step="10" value="40" id="minScoreRange" name="min_score">
+                        </div>
+                    </div>
+
+                    <!-- Submit Button -->
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg" id="searchBtn">
+                            <i class="bi bi-search"></i> 検索開始
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Progress Section (Hidden initially) -->
+        <div id="progressSection" class="card shadow-sm mb-4" style="display: none;">
+            <div class="card-body">
+                <h6 class="mb-3"><i class="bi bi-hourglass-split"></i> 検索中...</h6>
+                <div class="progress mb-2" style="height: 25px;">
+                    <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
+                </div>
+                <small id="progressMessage" class="text-muted">準備中...</small>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" style="display: none;">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-list-check"></i> 検索結果</h5>
+                    <button id="downloadBtn" class="btn btn-light btn-sm">
+                        <i class="bi bi-download"></i> CSVダウンロード
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="resultsSummary" class="alert alert-info">
+                        <strong>0件</strong> のリードが見つかりました
+                    </div>
+                    <div id="resultsContainer" class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+                        <!-- Results cards will be inserted here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Section -->
+        <div id="errorSection" class="alert alert-danger" style="display: none;" role="alert">
+            <i class="bi bi-exclamation-triangle"></i> <span id="errorMessage"></span>
+        </div>
+    </div>
+
+    <footer class="mt-5 py-3 bg-light">
+        <div class="container text-center text-muted">
+            <small>Lead Finder &copy; 2026 | 個人経営ビジネス向けリード生成システム</small>
+        </div>
+    </footer>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script>
+        // City data
+        const CITIES = {{ cities | tojson }};
+
+        // Initialize city selection on page load
+        $(document).ready(function() {
+            updateCitySelection('東京');
+
+            $('input[name="region"]').change(function() {
+                updateCitySelection($(this).val());
+            });
+        });
+
+        function updateCitySelection(region) {
+            const citySelection = $('#citySelection');
+            citySelection.empty();
+
+            const cities = CITIES[region];
+            cities.forEach((city, index) => {
+                citySelection.append(`
+                    <div class="col">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="city" value="${city}" id="city-${index}">
+                            <label class="form-check-label" for="city-${index}">
+                                ${city}
+                            </label>
+                        </div>
+                    </div>
+                `);
+            });
+        }
+    </script>
+</body>
+</html>

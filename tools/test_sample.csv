@@ -1,0 +1,2 @@
+store_name,url,comment,score,region,city,business_type,site_type,phone,email,source_query,fetched_at_iso
+Test Salon,https://example.com/test,△ minor SEO,75,tokyo,Shinjuku,Counseling,brochure,03-0000-0000,info@example.com,query1,2026-01-18T00:00:00
