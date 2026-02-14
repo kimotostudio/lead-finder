@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -e
+
+cd "$(dirname "$0")/.."
+
+echo "=== OPS CYCLE START ==="
+date
+
+python -m tools.ops_cycle \
+  --slice 200 \
+  --input web_app/output/merge_fukuoka_all_queries.csv
+
+echo "=== OPS CYCLE END ==="
+date
