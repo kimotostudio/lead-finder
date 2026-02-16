@@ -54,6 +54,20 @@ def _normalize_domain(domain: str) -> str:
     return d
 
 
+def _extract_existing_ops_domains(text: str) -> list[str]:
+    pattern = re.compile(
+        rf"{re.escape(OPS_BLOCK_START)}\s*OPS_AUTO_EXCLUDED_DOMAINS\s*=\s*\{{(.*?)\}}\s*{re.escape(OPS_BLOCK_END)}",
+        re.DOTALL,
+    )
+    m = pattern.search(text)
+    if not m:
+        return []
+    body = m.group(1)
+    found = re.findall(r"'([^']+)'", body)
+    normalized = [_normalize_domain(x) for x in found]
+    return sorted({x for x in normalized if x and "." in x})
+
+
 def select_candidate_domains(kpi: dict[str, Any], max_domains: int = 5) -> list[str]:
     """Pick deterministic bad domains from KPI diagnostics."""
     diagnostics = kpi.get("diagnostics", {}) if isinstance(kpi, dict) else {}
@@ -138,20 +152,22 @@ def apply_patch_to_file(target_file: Path, domains: list[str], run_dir: Path) ->
             message=f"target file missing: {target_file}",
         )
 
-    domains = [_normalize_domain(d) for d in domains]
-    domains = [d for d in domains if d and "." in d]
-    domains = sorted(set(domains))
-    if not domains:
+    candidate_domains = [_normalize_domain(d) for d in domains]
+    candidate_domains = [d for d in candidate_domains if d and "." in d]
+    candidate_domains = sorted(set(candidate_domains))
+    if not candidate_domains:
         return PatchResult(
             applied=False,
             target_file=target_file,
             backup_file=None,
             diff_text="",
             domains_added=[],
-            message="no candidate domains from KPI diagnostics",
+            message="patch_empty:no_candidate_domains",
         )
 
     original = target_file.read_text(encoding="utf-8", errors="replace")
+    existing_domains = _extract_existing_ops_domains(original)
+    domains = sorted(set(existing_domains).union(candidate_domains))
     updated = _insert_check_snippet_if_missing(original)
     updated = _upsert_ops_block(updated, domains)
 
@@ -161,8 +177,8 @@ def apply_patch_to_file(target_file: Path, domains: list[str], run_dir: Path) ->
             target_file=target_file,
             backup_file=None,
             diff_text="",
-            domains_added=domains,
-            message="patch produced no content change",
+            domains_added=[],
+            message="patch_empty:no_content_change",
         )
 
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -184,7 +200,7 @@ def apply_patch_to_file(target_file: Path, domains: list[str], run_dir: Path) ->
         target_file=target_file,
         backup_file=backup,
         diff_text=diff_text,
-        domains_added=domains,
+        domains_added=[d for d in domains if d not in existing_domains],
         message="applied",
     )
 
@@ -201,4 +217,3 @@ def revert_patch(result: PatchResult) -> bool:
         return False
     shutil.copyfile(result.backup_file, result.target_file)
     return True
-

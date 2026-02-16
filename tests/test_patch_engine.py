@@ -45,3 +45,35 @@ def test_apply_and_revert_patch_to_file(tmp_path: Path) -> None:
     assert revert_patch(result) is True
     reverted = target.read_text(encoding="utf-8")
     assert "OPS_AUTO_EXCLUDED_DOMAINS" not in reverted
+
+
+def test_apply_patch_empty_when_candidate_domains_missing(tmp_path: Path) -> None:
+    target = tmp_path / "filters.py"
+    target.write_text("def is_excluded_domain(url: str):\n    return False, ''\n", encoding="utf-8")
+    result = apply_patch_to_file(target, [], tmp_path / "run")
+    assert result.applied is False
+    assert result.message == "patch_empty:no_candidate_domains"
+    assert result.diff_text == ""
+
+
+def test_apply_patch_keeps_existing_ops_domains(tmp_path: Path) -> None:
+    target = tmp_path / "filters.py"
+    run_dir = tmp_path / "run"
+    target.write_text(
+        "# OPS_AUTO_BLOCKLIST_START\n"
+        "OPS_AUTO_EXCLUDED_DOMAINS = {\n"
+        "    'existing.com',\n"
+        "}\n"
+        "# OPS_AUTO_BLOCKLIST_END\n\n"
+        "def is_excluded_domain(url: str):\n"
+        "    domain = 'x'\n"
+        "    if not domain:\n"
+        "        return False, ''\n"
+        "    return False, ''\n",
+        encoding="utf-8",
+    )
+    result = apply_patch_to_file(target, ["new.com"], run_dir)
+    assert result.applied is True
+    updated = target.read_text(encoding="utf-8")
+    assert "existing.com" in updated
+    assert "new.com" in updated

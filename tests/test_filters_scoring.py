@@ -89,3 +89,27 @@ def test_self_hosted_not_filtered():
     is_filtered, reason = get_filter_reason(lead)
     assert not is_filtered
     assert reason == ''
+
+
+def test_government_domain_excluded_with_reason():
+    lead = make_lead(url='https://www.city.example.lg.jp/page', title='自治体ページ')
+    is_filtered, reason = get_filter_reason(lead)
+    assert is_filtered
+    assert reason == 'domain:gov_association'
+
+
+def test_global_media_domain_filtered_unless_local_pattern():
+    lead = make_lead(url='https://forbes.com/some-article', title='World ranking')
+    is_filtered, reason = get_filter_reason(lead)
+    assert is_filtered
+    assert 'domain:global_media:forbes.com' == reason
+
+    # Local business pattern should bypass global-media filter.
+    local_like = make_lead(
+        url='https://forbes.com/fukuoka-private-salon',
+        title='福岡 個人サロン 完全予約',
+        visible_text='個人カウンセリング サービス案内',
+    )
+    is_filtered, reason = get_filter_reason(local_like)
+    assert not is_filtered
+    assert reason == ''

@@ -234,8 +234,68 @@ NOISE_PATH_MARKERS: tuple[str, ...] = (
     "/column",
 )
 
+GLOBAL_MEDIA_NOISE_DOMAINS: tuple[str, ...] = (
+    "forbes.com",
+    "cnn.com",
+    "bbc.com",
+    "reuters.com",
+    "apnews.com",
+)
+
+LOCAL_BUSINESS_MARKERS: tuple[str, ...] = (
+    "サロン",
+    "整体",
+    "美容",
+    "カウンセリング",
+    "セラピー",
+    "個人",
+    "予約",
+    "福岡",
+    "北九州",
+    "久留米",
+    "市",
+    "区",
+    "町",
+    "村",
+    "fukuoka",
+    "salon",
+    "therapy",
+    "counseling",
+    "private",
+    "owner",
+    "clinic",
+)
+
 CLASS_SOLO_MARKERS = ("solo", "個人", "一人", "1人", "small", "小規模")
 CLASS_CORPORATE_MARKERS = ("corporate", "法人", "株式会社", "有限会社", "group", "グループ")
+UNKNOWN_TO_CORPORATE_STRONG_MARKERS = (
+    "公益社団法人",
+    "一般社団法人",
+    "公益財団法人",
+    "一般財団法人",
+    "社会福祉法人",
+    "医療法人",
+    "学校法人",
+    "宗教法人",
+    "特定非営利活動法人",
+    "npo法人",
+    "行政",
+    "自治体",
+    "協同組合",
+    "連合会",
+    "事業団",
+    "公社",
+    "公団",
+    "NPO法人",
+    "商工会",
+)
+
+UNKNOWN_TO_CORPORATE_DOMAIN_MARKERS = (
+    "login_subdomain",
+    "accounts_subdomain",
+    "select-type.com",
+    "aliexpress.com",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -360,6 +420,8 @@ def classify_noise(domain: str, row: dict[str, str]) -> tuple[bool, str]:
     for category, markers in NOISE_DOMAIN_MARKERS.items():
         for marker in markers:
             if marker in lower_domain:
+                if category == "global_media_news" and _looks_local_business_pattern(row):
+                    continue
                 return True, f"domain:{category}:{marker}"
 
     for marker in NOISE_PATH_MARKERS:
@@ -367,6 +429,40 @@ def classify_noise(domain: str, row: dict[str, str]) -> tuple[bool, str]:
             return True, f"path:aggregator:{marker}"
 
     return False, ""
+
+
+def _looks_local_business_pattern(row: dict[str, str]) -> bool:
+    parts: list[str] = []
+    for key in (*QUERY_COLS, *TEXT_FALLBACK_COLS, *SHOP_NAME_COLS, *CITY_COLS):
+        if key in row:
+            v = str(row.get(key, "")).strip()
+            if v:
+                parts.append(v.lower())
+    blob = " ".join(parts)
+    return any(marker.lower() in blob for marker in LOCAL_BUSINESS_MARKERS)
+
+
+def load_ops_auto_excluded_domains(filters_path: Path) -> set[str]:
+    if not filters_path.exists():
+        return set()
+    text = read_text_safe(filters_path)
+    pattern = re.compile(
+        r"# OPS_AUTO_BLOCKLIST_START\s*OPS_AUTO_EXCLUDED_DOMAINS\s*=\s*\{(.*?)\}\s*# OPS_AUTO_BLOCKLIST_END",
+        re.DOTALL,
+    )
+    m = pattern.search(text)
+    if not m:
+        return set()
+    body = m.group(1)
+    found = re.findall(r"'([^']+)'", body)
+    normalized: set[str] = set()
+    for d in found:
+        clean = d.strip().lower()
+        if clean.startswith("www."):
+            clean = clean[4:]
+        if clean and "." in clean:
+            normalized.add(clean)
+    return normalized
 
 
 def detect_city(row: dict[str, str]) -> tuple[bool, str]:
@@ -392,17 +488,58 @@ def detect_city(row: dict[str, str]) -> tuple[bool, str]:
     return False, ""
 
 
-def classify_size(row: dict[str, str]) -> str:
+def _unknown_to_corporate_keyword(row: dict[str, str]) -> str:
+    # For safety, only use strong legal-entity signals in title/name/reason-like fields.
+    parts: list[str] = []
+    for key in (
+        "title",
+        "shop_name",
+        "visible_text",
+        "reasons",
+        "店舗名",
+        "表示名",
+        "store_name",
+        "shop_name",
+        "name",
+        "営業ラベル理由",
+        "コメント",
+        "フィルタ理由",
+    ):
+        if key in row:
+            v = str(row.get(key, "")).strip()
+            if v:
+                parts.append(v.lower())
+    blob = " ".join(parts)
+    for marker in UNKNOWN_TO_CORPORATE_STRONG_MARKERS:
+        if marker.lower() in blob:
+            return marker
+    return ""
+
+
+def _unknown_to_corporate_domain_keyword(domain: str) -> str:
+    d = (domain or "").lower()
+    if d.startswith("login."):
+        return "login_subdomain"
+    if d.startswith("accounts."):
+        return "accounts_subdomain"
+    if d == "select-type.com" or d.endswith(".select-type.com"):
+        return "select-type.com"
+    if d == "aliexpress.com" or d.endswith(".aliexpress.com"):
+        return "aliexpress.com"
+    return ""
+
+
+def classify_size_with_reason(row: dict[str, str]) -> tuple[str, str]:
     raw = _first_value(row, CLASS_COLS).lower()
     if raw:
         if any(m in raw for m in CLASS_SOLO_MARKERS):
             if "small" in raw or "小規模" in raw:
-                return "small"
-            return "solo"
+                return "small", ""
+            return "solo", ""
         if any(m in raw for m in CLASS_CORPORATE_MARKERS):
-            return "corporate"
+            return "corporate", ""
         if "unknown" in raw or "不明" in raw:
-            return "unknown"
+            pass
 
     blob_parts = []
     for key in ("個人度理由", "個人度根拠", "コメント", "フィルタ理由"):
@@ -411,10 +548,19 @@ def classify_size(row: dict[str, str]) -> str:
     blob = " ".join(blob_parts)
     if blob:
         if any(m in blob for m in ("個人", "一人", "small", "小規模")):
-            return "solo"
+            return "solo", ""
         if any(m in blob for m in ("法人", "株式会社", "corporate", "chain", "グループ")):
-            return "corporate"
-    return "unknown"
+            return "corporate", ""
+
+    kw = _unknown_to_corporate_keyword(row)
+    if kw:
+        return "corporate", f"unknown_to_corporate:{kw}"
+    return "unknown", ""
+
+
+def classify_size(row: dict[str, str]) -> str:
+    classification, _ = classify_size_with_reason(row)
+    return classification
 
 
 def normalize_label(raw_label: str) -> str:
@@ -495,11 +641,17 @@ def build_config_hash(governance: dict[str, str], thresholds: ParsedThresholds) 
     return hashlib.sha256(encoded).hexdigest()[:16]
 
 
-def evaluate_rows(rows: list[dict[str, str]], notes: list[str]) -> tuple[list[LeadEval], Counter[str], Counter[str], list[str]]:
+def evaluate_rows(
+    rows: list[dict[str, str]],
+    notes: list[str],
+    ops_auto_domains: set[str] | None = None,
+) -> tuple[list[LeadEval], Counter[str], Counter[str], list[str], list[dict[str, str]]]:
     evaluated: list[LeadEval] = []
     bad_domains_counter: Counter[str] = Counter()
     noise_reasons_counter: Counter[str] = Counter()
     missing_city_examples: list[str] = []
+    unknown_examples: list[dict[str, str]] = []
+    ops_auto_domains = ops_auto_domains or set()
 
     for row in rows:
         domain, raw_url = extract_domain_and_url(row)
@@ -509,8 +661,27 @@ def evaluate_rows(rows: list[dict[str, str]], notes: list[str]) -> tuple[list[Le
             score = _to_float(_first_value(row, ("スコア", "score")))
 
         city_detected, city_value = detect_city(row)
-        classification = classify_size(row)
-        is_noise, noise_reason = classify_noise(domain, row)
+        classification, class_reason = classify_size_with_reason(row)
+        if classification == "unknown":
+            domain_kw = _unknown_to_corporate_domain_keyword(domain)
+            if domain_kw:
+                classification = "corporate"
+                class_reason = (
+                    f"{class_reason}; unknown_to_corporate:{domain_kw}"
+                    if class_reason
+                    else f"unknown_to_corporate:{domain_kw}"
+                )
+        if (
+            domain
+            and any(domain == d or domain.endswith("." + d) for d in ops_auto_domains)
+            and not (
+                any(domain == d or domain.endswith("." + d) for d in GLOBAL_MEDIA_NOISE_DOMAINS)
+                and _looks_local_business_pattern(row)
+            )
+        ):
+            is_noise, noise_reason = True, "domain:ops_auto"
+        else:
+            is_noise, noise_reason = classify_noise(domain, row)
         if is_noise and domain:
             bad_domains_counter[domain] += 1
             noise_reasons_counter[noise_reason] += 1
@@ -518,6 +689,8 @@ def evaluate_rows(rows: list[dict[str, str]], notes: list[str]) -> tuple[list[Le
         raw_label = _first_value(row, LABEL_COLS)
         label = normalize_label(raw_label)
         label_reason = _first_value(row, LABEL_REASON_COLS)
+        if class_reason:
+            label_reason = f"{label_reason}; {class_reason}" if label_reason else class_reason
 
         if not label:
             inferred, inferred_reason = infer_label(is_noise, score, city_detected, classification)
@@ -526,6 +699,16 @@ def evaluate_rows(rows: list[dict[str, str]], notes: list[str]) -> tuple[list[Le
                 label_reason = inferred_reason
 
         is_positive = (score > 0.0) and (not is_noise)
+        if is_positive and classification == "unknown" and len(unknown_examples) < 10:
+            marker = _unknown_to_corporate_keyword(row) or _unknown_to_corporate_domain_keyword(domain)
+            unknown_examples.append(
+                {
+                    "domain": domain,
+                    "shop_name": _first_value(row, SHOP_NAME_COLS),
+                    "marker_hit": "true" if marker else "false",
+                    "marker": marker or "",
+                }
+            )
         if is_positive and (not city_detected):
             example = raw_url or domain or _first_value(row, SHOP_NAME_COLS)
             if example and len(missing_city_examples) < 20:
@@ -554,7 +737,7 @@ def evaluate_rows(rows: list[dict[str, str]], notes: list[str]) -> tuple[list[Le
         if not _first_value(row, SCORE_COLS) and not _first_value(row, ("スコア", "score")):
             notes.append("missing_score_column_or_value_detected")
 
-    return evaluated, bad_domains_counter, noise_reasons_counter, missing_city_examples
+    return evaluated, bad_domains_counter, noise_reasons_counter, missing_city_examples, unknown_examples
 
 
 def phase_status(rates: dict[str, float], thresholds: PhaseThresholds) -> tuple[bool, list[str]]:
@@ -570,6 +753,19 @@ def phase_status(rates: dict[str, float], thresholds: PhaseThresholds) -> tuple[
     if rates["city_missing_rate"] > thresholds.city_missing_rate_max:
         blocking.append("city_missing_rate")
     return len(blocking) == 0, blocking
+
+
+def _is_forced_noise_for_top50(row: LeadEval) -> bool:
+    domain = (row.domain or "").lower()
+    if domain.endswith(".go.jp") or domain.endswith(".lg.jp"):
+        return True
+
+    reason_blob = f"{row.label_reason} {row.noise_reason}".lower()
+    if "domain:gov_association" in reason_blob:
+        return True
+    if "path:aggregator" in reason_blob:
+        return True
+    return False
 
 
 def compute_kpi_payload(
@@ -591,7 +787,12 @@ def compute_kpi_payload(
                 out.append(n)
         return out
 
-    evaluated, bad_domains_counter, noise_reasons_counter, missing_city_examples = evaluate_rows(rows, notes)
+    ops_auto_domains = load_ops_auto_excluded_domains(ROOT / "src" / "filters.py")
+    evaluated, bad_domains_counter, noise_reasons_counter, missing_city_examples, unknown_examples = evaluate_rows(
+        rows,
+        notes,
+        ops_auto_domains=ops_auto_domains,
+    )
     total_leads = len(evaluated)
     noise_leads = sum(1 for r in evaluated if r.is_noise)
     positive_leads = sum(1 for r in evaluated if r.is_positive)
@@ -619,6 +820,9 @@ def compute_kpi_payload(
     )
     top50 = ranked[:50]
     top50_good_count = sum(1 for r in top50 if r.label == "○")
+    top50_effective_good_count = sum(
+        1 for r in top50 if r.label == "○" and (not _is_forced_noise_for_top50(r))
+    )
     top50_bad_domain_count = sum(1 for r in top50 if r.is_noise)
     top50_city_missing_count = sum(1 for r in top50 if not r.city_detected)
 
@@ -660,6 +864,7 @@ def compute_kpi_payload(
         "rates": rates,
         "top50": {
             "top50_good_count": top50_good_count,
+            "top50_effective_good_count": top50_effective_good_count,
             "top50_bad_domain_count": top50_bad_domain_count,
             "top50_city_missing_count": top50_city_missing_count,
             "sample": sample,
@@ -681,6 +886,7 @@ def compute_kpi_payload(
                 {"reason": r, "count": c} for r, c in noise_reasons_counter.most_common(10)
             ],
             "missing_city_examples": missing_city_examples[:10],
+            "unknown_examples_top": unknown_examples[:10],
             "notes": _dedupe_notes(notes),
         },
     }
@@ -763,6 +969,7 @@ def write_report(report_path: Path, kpi: dict[str, Any]) -> None:
         f"- positive_leads: `{counts['positive_leads']}`",
         f"- positive_quality_leads: `{counts['positive_quality_leads']}`",
         f"- top50_good_count: `{top50['top50_good_count']}`",
+        f"- top50_effective_good_count: `{top50['top50_effective_good_count']}`",
         f"- top50_bad_domain_count: `{top50['top50_bad_domain_count']}`",
         "",
         "## Bottleneck",
@@ -775,6 +982,22 @@ def write_report(report_path: Path, kpi: dict[str, Any]) -> None:
         f"- Action: {patch_desc}",
         "",
     ]
+
+    if rates["unknown_rate"] > p1["unknown_rate_max"]:
+        unknown_examples = kpi.get("diagnostics", {}).get("unknown_examples_top", [])
+        lines.extend(
+            [
+                "## Unknown Examples (Top, For Debug)",
+                "",
+                "| domain | shop_name | marker_hit | marker |",
+                "|---|---|---:|---|",
+            ]
+        )
+        for item in unknown_examples:
+            lines.append(
+                f"| {item.get('domain','')} | {item.get('shop_name','')} | {item.get('marker_hit','')} | {item.get('marker','')} |"
+            )
+        lines.append("")
 
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text("\n".join(lines), encoding="utf-8")
@@ -815,7 +1038,13 @@ def validate_payload_shape(kpi: dict[str, Any]) -> None:
         if key not in kpi["rates"]:
             raise ValueError(f"missing rates key: {key}")
 
-    top50_required = ["top50_good_count", "top50_bad_domain_count", "top50_city_missing_count", "sample"]
+    top50_required = [
+        "top50_good_count",
+        "top50_effective_good_count",
+        "top50_bad_domain_count",
+        "top50_city_missing_count",
+        "sample",
+    ]
     for key in top50_required:
         if key not in kpi["top50"]:
             raise ValueError(f"missing top50 key: {key}")
@@ -823,7 +1052,7 @@ def validate_payload_shape(kpi: dict[str, Any]) -> None:
     if "phase1" not in kpi["thresholds"]:
         raise ValueError("missing thresholds.phase1")
 
-    diag_required = ["bad_domains_top", "noise_reasons_top", "missing_city_examples", "notes"]
+    diag_required = ["bad_domains_top", "noise_reasons_top", "missing_city_examples", "unknown_examples_top", "notes"]
     for key in diag_required:
         if key not in kpi["diagnostics"]:
             raise ValueError(f"missing diagnostics key: {key}")

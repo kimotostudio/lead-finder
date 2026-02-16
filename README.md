@@ -257,6 +257,92 @@ Google Sheets連携 → Main集計 → HTML生成 の完全自動パイプライ
 
 ---
 
+## 固定ベンチ一括検証（ops_cycle）
+
+ルール変更後に、固定CSVベンチをまとめて検証できます。
+
+### 実行
+
+```bash
+python3 -B -m tools.bench_run --mode B --slice 200
+```
+
+主なオプション:
+
+- `--mode A|B|both`（デフォルト: `both`）
+- `--slice`（デフォルト: `200`）
+- `--fail-fast`（最初のFAILで停止）
+- `--report-dir`（未指定時: `ops_runs/bench_YYYYMMDD_HHMMSS`）
+
+### 成果物
+
+`ops_runs/bench_<timestamp>/` に以下を出力します。
+
+- `BENCH_SUMMARY.md`: ベンチごとの PASS/FAIL、failed gates、主要KPI差分、対応する `ops_runs` パス
+- `BENCH_SUMMARY.json`: 上記の機械可読版
+- `FAILURES.md`: FAILベンチのみの詳細（主要KPI差分 + `AFTER_KPI_REPORT.md` 抜粋）
+
+### ベンチ定義
+
+固定ベンチは `tools/bench_config.py` の `BENCHES` で管理します（`name`, `input_csv_path`, `slice`, `mode`, `loop`, `notes`）。
+初期設定の `tokyo_xxx` / `osaka_xxx` は環境に合わせてCSVパスを更新してください。
+
+### Theta収束ベンチ（複数地域, Mode B）
+
+複数の `leads_*.csv` に対して `ops_cycle` を一括実行し、Theta/KPIの収束傾向を1つのレポートに集約できます。
+
+```bash
+bash scripts/bench_theta_convergence.sh
+python3 scripts/collect_theta_convergence.py
+```
+
+- ベンチ実行:
+  - `web_app/output/leads_*.csv` を列挙
+  - 地域トークンを使って重複を避ける決定的サブセットを選択（最大12件）
+  - 各CSVに `python3 -B -m tools.ops_cycle --mode B --input <csv> --max-candidates 3 --loop 10 --stability-slice 200 --no-progress-k 2` を実行
+  - 実行マニフェストを `ops_runs/_reports/theta_convergence_runs_<timestamp>.tsv` に保存
+- 集約レポート:
+  - `ops_runs/_reports/THETA_CONVERGENCE_<timestamp>.md` を出力
+  - 1 run/CSV の比較テーブル、PASS rate、回帰フラグ、ワースト3 run を表示
+
+#### レポートの見方
+
+- `passed=false` / `stability_failed` は即回帰候補
+- `unknown_rate` が `max` 超過、または `top50_effective_good_count` 低下は要注意
+- `theta_delta` が負または `theta_not_improved` は、局所最適や過学習の兆候
+
+#### 回帰時の次アクション
+
+1. `unknown_rate_exceeded` が多い場合:
+   `tools/kpi_generate.py` の unknown->corporate strong marker を1件だけ追加
+2. `top50_effective_degraded` が多い場合:
+   除外ルールを緩めず、候補順序（Mode Bの優先語）を小さく調整
+3. `theta_not_improved` が続く場合:
+   `PROGRESS_THETA_WEIGHTS` を見直す前に、まず候補語を1件追加して再ベンチ
+
+### 福岡市 営業リスト生成
+
+福岡市向けの探索語辞書を使って候補を大量探索し、営業向けCSVを出力します。
+
+```bash
+python3 -B -m tools.run_fukuoka_city_search \
+  --config config/search_terms_fukuoka.json \
+  --output-dir web_app/output \
+  --max-queries 300 \
+  --max-results-per-query 5 \
+  --parallel-workers 6
+```
+
+- クエリ辞書: `config/search_terms_fukuoka.json`
+- 出力: `web_app/output/leads_fukuoka_city_<timestamp>.csv`
+- 主要列: `domain,url,title,category_guess,has_contact_page,contact_url,has_form,form_url,has_line,address,area_guess,solo_score,reason`
+- 再現性向上:
+  - クエリ生成順固定 + URLの `domain/url` ソート固定
+  - seed固定
+  - timeout/retry/parallel をログとメタJSONに出力
+
+---
+
 ## License
 
 MIT License
