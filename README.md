@@ -64,6 +64,18 @@ $env:OPENAI_API_KEY = "sk-..."
 
 ---
 
+## Screenshots
+
+Search configuration: choose the target area, business types, score filters, and optional AI checks before running a lead search.
+
+![Lead Finder search configuration](docs/search-configuration.png)
+
+Scored results: review ranked leads with weakness signals, contact fields, and CSV export support.
+
+![Lead Finder scored results](docs/scored-results.png)
+
+---
+
 ## 検索パイプライン
 
 ```
