@@ -1,72 +1,37 @@
-# Lead Finder System
+# Lead Finder
 
-小規模ビジネス（カウンセリング、コーチング、ヨガ、整体など）のリード発掘・スコアリングシステム。
-47都道府県・778都市対応のWebアプリケーション + CLI パイプライン。
+Lead discovery, scoring, and operational lead-quality refinement for Japanese small-business outreach.
 
----
+## Overview
 
-## 主な機能
+Lead Finder is a working lead discovery and lead-quality refinement system for Japanese local-business outreach. It combines a Flask web app with CLI runners to search for businesses by prefecture, city, and business type, bias collection toward real Japanese local-business sites, score website weakness and business fit, optionally run AI-based relevance and weakness checks, and export reviewable CSVs for downstream outreach work.
 
-- **2パス検索戦略**: Pass 1（粗いクエリ5本）→ 結果不足時に Pass 2（拡張クエリ）を自動実行
-- **JP偏重検索**: `site:.jp`・`公式`・`営業時間` 等の日本語シグナルでノイズ低減、海外TLD自動除外
-- **弱さスコアリング (0-100)**: デザインの古さ、予約システム欠如、料金不明等を自動検出
-- **個人事業主分類**: solo / small / corporate / unknown の4段階判定
-- **AIフィルタ (GPT-4o-mini)**: ポータル・SNS・海外サイト等をフラグ付きで自動除外
-- **AI弱さ検証 (GPT-4o-mini)**: 上位リードの弱さをAIが再チェック
-- **CSV出力**: 全フィールド（弱さ・個人度・AI判定含む）をCSVエクスポート
-- **キャンセル機能**: 実行中の検索をいつでも中止可能
+This is not a heavy machine learning product. Ranking and filtering are driven by heuristic scoring, deterministic filters, KPI-based evaluation, and iterative tuning work.
 
----
+## Why This Project Exists
 
-## クイックスタート
+For small-business outreach, the bottleneck is usually not writing a message. It is finding businesses with their own websites, enough local signal, and a realistic improvement opportunity. Lead Finder reduces that manual prospecting work and turns it into a repeatable operational pipeline.
 
-### 1. 環境準備
+This repository is part of:
 
-```powershell
-# 仮想環境作成
-python -m venv .venv
-.\.venv\Scripts\activate
+`lead-finder -> demo-generator -> outreach automation`
 
-# 依存関係インストール
-pip install -r requirements.txt
-```
+## Core Features
 
-### 2. Webアプリ起動（推奨）
-
-```powershell
-cd web_app
-python app.py
-```
-
-ブラウザで `http://localhost:5000` にアクセス。
-
-### 3. AI機能を使う場合
-
-```powershell
-# OpenAI APIキーを設定
-$env:OPENAI_API_KEY = "sk-..."
-```
-
-詳細設定パネルで「AIで関係ないサイトを除外」「AI検証」をONにする。
-
----
-
-## Webアプリ使用方法
-
-1. **エリア選択**: 地方 → 都道府県 → 都市（複数選択可）
-2. **業種選択**: チップUIで複数業種を選択
-3. **ターゲット設定**: プリセット（個人事業主優先 / 小規模 / 全規模）を選択
-4. **詳細設定**（任意）:
-   - 取得件数（5〜100件/クエリ）
-   - スコア範囲・弱さ閾値・個人度フィルタ
-   - AIフィルタ / AI検証の有効化
-5. **検索開始** → プログレスバーで進捗確認 → 結果カードで確認 → CSV ダウンロード
-
----
+- Flask web app for interactive lead discovery by region, prefecture, city, and business type
+- Web app + CLI pipeline for repeatable local-business search and CSV export
+- Core 2-pass search strategy, with an additional variation pass when query budget remains
+- Japanese-signal and `.jp`-biased search for stronger locality precision
+- Hard URL filtering, blocked-domain rules, prechecks, and per-domain caps before expensive processing
+- Weakness scoring for website quality and outreach opportunity analysis
+- Solo / small / corporate / unknown classification for business size and fit
+- Optional AI relevance filtering and AI weakness verification using GPT-4o-mini
+- Normalized CSV export with explainability fields, liveness metadata, and optional AI annotations
+- Operations tooling for Fukuoka city search, KPI generation, benchmark runs, and precision-first refinement loops
 
 ## Screenshots
 
-Search configuration: choose the target area, business types, score filters, and optional AI checks before running a lead search.
+Search configuration: set target area, business type, score filters, and optional AI checks before running a search.
 
 ![Lead Finder search configuration](docs/search-configuration.png)
 
@@ -74,270 +39,212 @@ Scored results: review ranked leads with weakness signals, contact fields, and C
 
 ![Lead Finder scored results](docs/scored-results.png)
 
----
+## Search and Processing Pipeline
 
-## 検索パイプライン
-
-```
-検索クエリ生成 (2-Pass)
-  → URL収集 (DuckDuckGo)
-  → プレフィルタ (ドメイン重複制限, ブロックURL除外, 海外TLD除外)
-  → ハードフィルタ (is_blocked_url)
-  → [任意] AI関連性ゲート (pre-crawl, URL単位)
-  → URL優先度ソート (.jp優先, ルートパス優先)
-  → プレチェック (HEAD要求で生存確認)
-  → クロール & 処理 (並列5ワーカー)
-  → 弱さスコアリング & 個人事業主分類
-  → スコアフィルタ & ソロフィルタ
-  → [任意] AIフィルタ (post-crawl, フラグ付き)
-  → [任意] AI弱さ検証 (GPT-4o-mini)
-  → CSV保存 & 結果表示
+```text
+Query generation (core 2-pass; optional variation pass)
+  -> URL collection
+  -> Japanese/locality filter
+  -> prefilter and per-domain caps
+  -> hard URL filter
+  -> optional AI relevance gate
+  -> URL precheck and priority ordering
+  -> crawl and process
+  -> weakness scoring and size classification
+  -> optional post-crawl AI filter
+  -> optional AI weakness verification
+  -> CSV export and review
 ```
 
-### 2パス検索
+### 2-pass query strategy
 
-| パス | クエリ数/ペア | 内容 |
-|------|-------------|------|
-| Pass 1 | 5本 | 基本クエリ + `料金`/`予約` + `site:.jp` + `公式` |
-| Pass 2 | 7本+ | `個人`/`自宅` + プラットフォーム指定 + スピリチュアル系拡張 |
+| Stage | Typical query behavior | Purpose |
+| --- | --- | --- |
+| Pass 1 | Base business query plus signals such as pricing, booking, `site:.jp`, and official-site hints | Get a broad but locality-biased first set of candidates |
+| Pass 2 | Expanded queries for low-yield city/business pairs, including solo-home-salon and platform variants | Recover weak but relevant candidates without widening the search globally |
+| Variation pass | Additional query variation when budget remains in the web flow | Improve recall after the core 2-pass logic has run |
 
-Pass 2 は Pass 1 の収集URLが `MIN_URLS_PER_PAIR`（デフォルト8）未満の場合のみ実行。
+Pass 2 is only triggered when Pass 1 does not collect enough URLs for a city/business pair. The threshold is controlled by `MIN_URLS_PER_PAIR`.
 
----
+## Scoring and Classification
 
-## AIフィルタ
+### Weakness scoring
 
-### post-crawlフィルタ（`batch_filter_relevance`）
+The repository uses heuristic weakness scoring rather than a learned model. Representative signals include:
 
-クロール済みリードの実コンテンツ（タイトル、テキスト）をGPT-4o-miniで分析。
+- missing viewport metadata
+- missing OGP metadata
+- low image count
+- thin text content
+- no visible booking flow
+- no visible pricing information
+- no visible contact form
+- no SSL
+- free-site-builder footprints
 
-**出力フィールド:**
-| フィールド | 値 | 説明 |
-|-----------|-----|------|
-| `ai_action` | KEEP / DROP | 保持 or 除外 |
-| `ai_flags` | 配列 | 該当フラグ（複数可） |
-| `ai_filter_reason` | 文字列 | 除外理由（日本語） |
-| `ai_filter_confidence` | 1-10 | 確信度（6未満はKEEP優先） |
+Weakness grades are currently grouped as:
 
-**判定フラグ:**
-- `OVERSEAS` — 海外サイト
-- `NON_JP_LANG` — 非日本語
-- `PORTAL` — ポータル/一覧サイト
-- `SNS` — SNSプロフィール/リンクまとめ
-- `DIRECTORY` — 口コミ/ランキングサイト
-- `JOB_LISTING` — 求人サイト
-- `PDF_OR_FILE` — PDF/非Webページ
-- `IRRELEVANT_INDUSTRY` — 無関係業種
-- `NO_LOCAL_SIGNAL` — 地域シグナルなし
+- `A`: `60+`
+- `B`: `40-59`
+- `C`: `<40`
 
-### AI弱さ検証（`batch_verify`）
+### Business size / fit classification
 
-上位N件のリードを「本当に弱いサイトか」AIが再判定。WEAK/NOT_WEAK + 確信度を付与。
+Solo-business classification combines:
 
----
+- corporate-term detection
+- platform detection
+- page-text and site-structure signals
+- contact/locality evidence gathered during processing
 
-## スコアリング
+The resulting classes are `solo`, `small`, `corporate`, and `unknown`.
 
-### 弱さスコア (0-100)
+### AI relevance and AI weakness checks
 
-| 要素 | 点数 |
-|------|------|
-| viewport未設定 | +15 |
-| OGP未設定 | +10 |
-| 画像5枚未満 | +10 |
-| テキスト300文字未満 | +15 |
-| 予約システムなし | +10 |
-| 料金情報なし | +10 |
-| 問い合わせフォームなし | +10 |
-| SSL未対応 | +10 |
-| フリープラットフォーム | +10 |
+`src/ai_verifier.py` supports two optional AI stages:
 
-**グレード**: A (60+), B (40-59), C (<40)
+- AI relevance filtering to remove portals, SNS profiles, overseas sites, non-local matches, and other weak targets
+- AI weakness verification to re-check the top weakness-ranked leads before downstream use
 
-### 個人事業主スコア
+The relevance stage keeps explicit fields such as `ai_action`, `ai_flags`, `ai_filter_reason`, and `ai_filter_confidence`, and uses a confidence threshold so uncertain cases are not dropped too aggressively.
 
-HTML/テキスト分析で solo / small / corporate / unknown を判定。法人語検出、プラットフォーム判定、テキストシグナル分析を組み合わせ。
+### CSV output
 
----
+The canonical output schema is defined in `src/normalize.py` (`FINAL_SCHEMA`). Output can include lead score, weakness score, size classification, contact fields, liveness metadata, source query, and optional AI fields.
 
-## CSV出力フォーマット
+## Operational Tuning and Quality Improvement
 
-| 列 | フィールド | 説明 |
-|----|-----------|------|
-| A | store_name | 店舗名 |
-| B | url | URL |
-| C | comment | コメント |
-| D | score | スコア (0-100) |
-| E | filter_reason | フィルタ理由 |
-| F-G | score_boost, boost_reasons | スコア増分 |
-| H-J | weakness_score, weakness_grade, weakness_reasons | 弱さ分析 |
-| K-Q | solo_* | 個人事業主分析 |
-| R-S | url_status, error_code | URL状態 |
-| T-V | region, city, business_type | 地域・業種 |
-| W | site_type | サイト種別 |
-| X-Y | phone, email | 連絡先 |
-| Z | source_query | 検索クエリ |
-| AA | fetched_at_iso | 取得日時 |
-| AB-AE | http_status, final_url, is_alive, checked_at_iso | Liveness |
-| AF-AH | ai_verified, ai_reason, ai_confidence | AI弱さ検証 |
-| AI-AL | ai_action, ai_flags, ai_filter_reason, ai_filter_confidence | AIフィルタ |
+This repository is not just a scraper. It includes a practical refinement layer for improving lead quality over repeated runs.
 
----
+- **Iterative threshold tuning:** score bounds, weakness thresholds, locality filters, per-domain caps, and AI confidence gates are adjusted and rechecked against actual output quality.
+- **Manual branching of decision rules:** mode-specific configs such as `config/search_terms_fukuoka.json`, `search_terms_fukuoka_A2.json`, `search_terms_fukuoka_A07.json`, and `search_terms_fukuoka_A08.json` make it practical to branch rule sets, compare behavior, and keep or revert changes deliberately.
+- **Bayesian-style tuning:** lightweight Bayesian-style tools such as Thompson-sampled query ranking (`tools/thompson_next_queries.py`, `tools/thompson_next_need_queries.py`) and threshold sweeps (`tools/sweep_gmb_thresholds.py`) are used to improve ranking precision without pretending this is a full ML ranking system.
+- **KPI-driven refinement:** `tools/kpi_generate.py`, `tools/ops_cycle.py`, and `tools/bench_run.py` generate BEFORE/AFTER KPI reports, gate rule changes, and track a theta-style progress score so changes can be judged against explicit operational metrics.
+- **Manual feedback loops:** `tools/init_manual_review_log.py` and `tools/improve_sendable_rules_from_worklog.py` connect exported leads back to human review and sendability outcomes.
+- **Operational logging and monitoring:** the web app writes `logs/app.log`, ops loops emit timestamped artifacts under `ops_runs/`, and batch flows write meta JSON and markdown summaries that are easy to tail or collect over SSH when the pipeline is monitored on a remote host.
+- **Real-world experimentation:** fixed benchmarks, convergence summaries, and focused regional runners are used to improve selection quality over time instead of treating the first scoring rules as final.
 
-## ファイル構成
+## Configuration
 
-```
-lead-finder/
-├── web_app/
-│   ├── app.py                 # Flask Webアプリ (メイン)
-│   ├── templates/
-│   │   └── index.html         # SPA テンプレート
-│   ├── static/
-│   │   ├── js/app.js          # フロントエンドJS
-│   │   └── css/style.css      # UIスタイル
-│   └── output/                # CSV出力先
-├── src/
-│   ├── ai_verifier.py         # AIフィルタ & AI弱さ検証 (GPT-4o-mini)
-│   ├── processor.py           # リード処理
-│   ├── scorer.py              # スコアリング
-│   ├── normalize.py           # CSV正規化 & スキーマ定義
-│   ├── output_writer.py       # CSV書き出し
-│   ├── weakness.py            # 弱さスコア計算
-│   ├── solo_classifier.py     # 個人事業主判定
-│   ├── solo_boost.py          # ソロブースト計算
-│   ├── liveness.py            # URL生存確認
-│   └── engines/               # 検索エンジン
-├── tests/
-│   ├── test_url_filtering.py  # URLフィルタ・クエリ生成テスト
-│   ├── test_weakness.py       # 弱さスコアテスト
-│   ├── test_solo_classifier.py# 個人事業主判定テスト
-│   ├── test_solo_boost.py     # ソロブーストテスト
-│   └── test_csv_output.py     # CSV出力テスト
-├── tools/                     # CLIパイプラインツール
-├── config/                    # クエリ・キーワード設定
-└── output/                    # CSV / HTML出力
-```
+Search behavior can be tuned through config JSON, runtime env vars, and batch-mode switches.
 
----
+| Knob | Default / examples | Purpose |
+| --- | --- | --- |
+| `MIN_URLS_PER_PAIR` | `8` | Trigger Pass 2 expansion for low-yield pairs |
+| `MAX_URLS_TO_PROCESS` | `400` | Cap the number of URLs processed in the web flow |
+| `MAX_QUERIES_TOTAL` | `250` | Cap total search queries |
+| `LEAD_PROCESS_WORKERS` | `5` | Control crawl/process concurrency |
+| `AI_RELEVANCE_TOP_N` | `30` | Limit AI relevance checks |
+| `AI_RELEVANCE_MIN_CONFIDENCE` | `6` | Avoid dropping low-confidence AI cases |
+| `MAX_URLS_PER_DOMAIN` | runtime env var | Prevent one domain from dominating a run |
+| `FOREIGN_FILTER_MODE` | `strict` or `balanced` | Control non-Japanese / foreign filtering behavior |
+| `LEADFINDER_FUKUOKA_QUERY_MODE` | `A2`, `A07`, `A08`, `A09`, `A10` | Switch mode-specific Fukuoka query logic during ops experiments |
 
-## 設定パラメータ
+## Environment Variables
 
-| パラメータ | デフォルト | 説明 |
-|-----------|----------|------|
-| `MIN_URLS_PER_PAIR` | 8 | Pass 2 発動の閾値 |
-| `MAX_URLS_TO_PROCESS` | 400 | クロール上限 |
-| `MAX_QUERIES_TOTAL` | 250 | 総クエリ数上限 |
-| `LEAD_PROCESS_WORKERS` | 5 | 並列クロールワーカー数 |
-| `AI_RELEVANCE_TOP_N` | 30 | AIフィルタ対象件数 |
-| `AI_RELEVANCE_MIN_CONFIDENCE` | 6 | AIフィルタ最低確信度 |
+### Common
 
----
+| Variable | Required | Used by | Notes |
+| --- | --- | --- | --- |
+| `OPENAI_API_KEY` | No | AI relevance filter / AI weakness verification | Enables GPT-4o-mini steps |
+| `BING_API_KEY` | No | Search layer | Optional Bing integration |
+| `BRAVE_API_KEY` | No | Search layer | Optional Brave integration |
+| `TIMEOUT` | No | Core pipeline | Default request timeout in `config/settings.py` |
+| `MAX_RETRIES` | No | Core pipeline | Retry count in `config/settings.py` |
+| `RATE_LIMIT_DELAY` | No | Core pipeline | Delay between requests |
+| `PARALLEL_WORKERS` | No | Core pipeline | Default worker count for generic CLI runners |
+| `MAX_RESULTS_PER_QUERY` | No | Core pipeline | Default query result cap |
+| `BATCH_SIZE` | No | Core pipeline | Batch-oriented processing knob |
 
-## 環境変数
+### Web app
 
-```
-OPENAI_API_KEY=sk-...           # AI機能用 (任意)
-GOOGLE_APPLICATION_CREDENTIALS  # Sheets API用 (CLIパイプライン)
-SHEETS_SPREADSHEET_ID           # Sheets ID (CLIパイプライン)
-BING_API_KEY                    # Bing検索API (任意)
-BRAVE_API_KEY                   # Brave検索API (任意)
-```
+| Variable | Required | Used by | Notes |
+| --- | --- | --- | --- |
+| `SECRET_KEY` | No | `web_app/app.py` | Flask session secret; defaults to a dev value |
+| `PORT` | No | `web_app/app.py` | Default `5000` |
+| `DEBUG` | No | `web_app/app.py` | Flask debug toggle |
+| `MIN_URLS_PER_PAIR` | No | Web search flow | Pass 2 trigger threshold |
+| `MAX_URLS_TO_PROCESS` | No | Web search flow | URL processing cap |
+| `MAX_QUERIES_TOTAL` | No | Web search flow | Total query budget |
+| `LEAD_PROCESS_WORKERS` | No | Web search flow | Crawl/process worker count |
+| `AI_RELEVANCE_TOP_N` | No | Web search flow | Max leads/URLs sent to AI relevance checks |
+| `AI_RELEVANCE_MIN_CONFIDENCE` | No | Web search flow | Minimum confidence to drop |
+| `MAX_URLS_PER_DOMAIN` | No | Web search flow | Per-domain cap before crawling |
+| `FOREIGN_FILTER_MODE` | No | Web search flow | `strict` or `balanced` |
 
----
+### Optional batch / ops integrations
 
-## テスト
+| Variable | Required | Used by | Notes |
+| --- | --- | --- | --- |
+| `GOOGLE_APPLICATION_CREDENTIALS` | No | Sheets / site-generator tools | Service account JSON path |
+| `SHEETS_SPREADSHEET_ID` | No | Sheets / pipeline tools | Spreadsheet target |
+| `LEADFINDER_FUKUOKA_QUERY_MODE` | No | `tools/run_fukuoka_city_search.py` | Select mode-specific Fukuoka query behavior |
+| `SERPEX_API_KEY` / `SERPER_API_KEY` | No | Specialized collectors in `tools/` | Used by Serpex / Serper-based collection flows |
+| `GOOGLE_MAPS_API_KEY` | No | `tools/collect_gmb_fukuoka.py` | Used for GMB-focused tooling |
 
-```powershell
-python -m pytest tests/ -v
-```
+## Testing
 
-112テスト（URLフィルタ、クエリ生成、弱さスコア、個人事業主分類、CSV出力）。
-
----
-
-## CLIパイプライン（旧方式）
-
-```powershell
-# テスト実行
-.\run_pipeline.bat tokyo
-
-# フル実行
-.\run_full_pipeline.bat tokyo kanagawa saitama
-```
-
-Google Sheets連携 → Main集計 → HTML生成 の完全自動パイプラインも利用可能。
-
----
-
-## 固定ベンチ一括検証（ops_cycle）
-
-ルール変更後に、固定CSVベンチをまとめて検証できます。
-
-### 実行
+Run the main test suite from the repository root:
 
 ```bash
-python3 -B -m tools.bench_run --mode B --slice 200
+python -m pytest tests -q
 ```
 
-主なオプション:
+The test suite covers filtering, normalization, scoring, CSV output, Fukuoka query modes, platform detection, KPI generation, `ops_cycle`, benchmark summaries, and theta/convergence helpers.
 
-- `--mode A|B|both`（デフォルト: `both`）
-- `--slice`（デフォルト: `200`）
-- `--fail-fast`（最初のFAILで停止）
-- `--report-dir`（未指定時: `ops_runs/bench_YYYYMMDD_HHMMSS`）
+## Benchmark / ops_cycle
 
-### 成果物
+`tools/ops_cycle.py` is a precision-first operational refinement loop, not a generic model trainer.
 
-`ops_runs/bench_<timestamp>/` に以下を出力します。
+Core flow:
 
-- `BENCH_SUMMARY.md`: ベンチごとの PASS/FAIL、failed gates、主要KPI差分、対応する `ops_runs` パス
-- `BENCH_SUMMARY.json`: 上記の機械可読版
-- `FAILURES.md`: FAILベンチのみの詳細（主要KPI差分 + `AFTER_KPI_REPORT.md` 抜粋）
+1. take a deterministic CSV slice
+2. generate BEFORE KPI / report artifacts
+3. propose a minimal precision patch from KPI diagnostics
+4. generate AFTER KPI / report artifacts
+5. accept only when mandatory gates pass and theta improves
+6. emit timestamped run artifacts under `ops_runs/<timestamp>/`
 
-### ベンチ定義
-
-固定ベンチは `tools/bench_config.py` の `BENCHES` で管理します（`name`, `input_csv_path`, `slice`, `mode`, `loop`, `notes`）。
-初期設定の `tokyo_xxx` / `osaka_xxx` は環境に合わせてCSVパスを更新してください。
-
-### Theta収束ベンチ（複数地域, Mode B）
-
-複数の `leads_*.csv` に対して `ops_cycle` を一括実行し、Theta/KPIの収束傾向を1つのレポートに集約できます。
+Example commands:
 
 ```bash
-bash scripts/bench_theta_convergence.sh
-python3 scripts/collect_theta_convergence.py
+python -m tools.ops_cycle --input web_app/output/merge_fukuoka_all_queries.csv --slice 200 --mode B
+python -m tools.bench_run --mode B --slice 200
+python scripts/collect_theta_convergence.py
 ```
 
-- ベンチ実行:
-  - `web_app/output/leads_*.csv` を列挙
-  - 地域トークンを使って重複を避ける決定的サブセットを選択（最大12件）
-  - 各CSVに `python3 -B -m tools.ops_cycle --mode B --input <csv> --max-candidates 3 --loop 10 --stability-slice 200 --no-progress-k 2` を実行
-  - 実行マニフェストを `ops_runs/_reports/theta_convergence_runs_<timestamp>.tsv` に保存
-- 集約レポート:
-  - `ops_runs/_reports/THETA_CONVERGENCE_<timestamp>.md` を出力
-  - 1 run/CSV の比較テーブル、PASS rate、回帰フラグ、ワースト3 run を表示
+Operational artifacts include:
 
-#### レポートの見方
+- `ops_runs/<timestamp>/...` run logs, KPI JSON, KPI reports, patch details, and validation outputs
+- `BENCH_SUMMARY.md` and `BENCH_SUMMARY.json` for fixed benchmark suites
+- convergence reports that compare theta and KPI movement across repeated runs
 
-- `passed=false` / `stability_failed` は即回帰候補
-- `unknown_rate` が `max` 超過、または `top50_effective_good_count` 低下は要注意
-- `theta_delta` が負または `theta_not_improved` は、局所最適や過学習の兆候
+The benchmark layer is meant to catch regressions, overfitting, and false precision gains before filter changes become the new default.
 
-#### 回帰時の次アクション
+## CLI / Batch Workflows
 
-1. `unknown_rate_exceeded` が多い場合:
-   `tools/kpi_generate.py` の unknown->corporate strong marker を1件だけ追加
-2. `top50_effective_degraded` が多い場合:
-   除外ルールを緩めず、候補順序（Mode Bの優先語）を小さく調整
-3. `theta_not_improved` が続く場合:
-   `PROGRESS_THETA_WEIGHTS` を見直す前に、まず候補語を1件追加して再ベンチ
-
-### 福岡市 営業リスト生成
-
-福岡市向けの探索語辞書を使って候補を大量探索し、営業向けCSVを出力します。
+### Recommended web app
 
 ```bash
-python3 -B -m tools.run_fukuoka_city_search \
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
+
+pip install -r requirements.txt
+pip install -r web_app/requirements.txt
+
+cd web_app
+python app.py
+```
+
+Open `http://localhost:5000`.
+
+### Fukuoka city search runner
+
+```bash
+python -m tools.run_fukuoka_city_search \
   --config config/search_terms_fukuoka.json \
   --output-dir web_app/output \
   --max-queries 300 \
@@ -345,16 +252,57 @@ python3 -B -m tools.run_fukuoka_city_search \
   --parallel-workers 6
 ```
 
-- クエリ辞書: `config/search_terms_fukuoka.json`
-- 出力: `web_app/output/leads_fukuoka_city_<timestamp>.csv`
-- 主要列: `domain,url,title,category_guess,has_contact_page,contact_url,has_form,form_url,has_line,address,area_guess,solo_score,reason`
-- 再現性向上:
-  - クエリ生成順固定 + URLの `domain/url` ソート固定
-  - seed固定
-  - timeout/retry/parallel をログとメタJSONに出力
+This runner expands a Fukuoka-focused query dictionary, keeps ordering deterministic, and writes outreach-oriented CSV plus meta JSON output.
 
----
+### General CLI paths
+
+```bash
+python advanced_search.py --region <jp-region-key> --test --output output/advanced_region_test.csv
+python main.py --queries data/queries.txt --output output/leads.csv
+python -m tools.init_manual_review_log --output web_app/output/manual_review_log_template.csv
+```
+
+Use `tools/run_full_search.py` and `tools/pipeline.py` for broader Sheets-oriented flows.
+
+## Project Structure
+
+```text
+lead-finder/
+|-- web_app/                # Recommended UI/API entry point
+|-- src/                    # Core crawling, scoring, filtering, normalization
+|-- tools/                  # Batch runners, ops loops, KPI utilities, and reports
+|-- config/                 # Search configs and settings
+|-- tests/                  # Pytest suite
+|-- scripts/                # One-off verification and maintenance helpers
+|-- site-generator/         # Secondary utility, not the main lead-finder entry path
+|-- advanced_search.py      # General CLI runner built on src/
+|-- main.py                 # General CLI runner built on src/
+|-- app.py                  # Older standalone CLI path
+`-- requirements.txt        # Core pipeline dependencies
+```
+
+Notes:
+
+- `web_app/app.py` is the main recommended entry point for public/demo use.
+- `tools/run_fukuoka_city_search.py` is the clearest current batch runner.
+- `tools/ops_cycle.py`, `tools/kpi_generate.py`, and `tools/bench_run.py` are the core refinement / tuning loop utilities.
+- Root `app.py` together with `fetcher.py`, `parser.py`, `searcher.py`, `scorer.py`, and `deduplicator.py` appears to be an older standalone path kept for compatibility.
+
+## Limitations
+
+- Search quality depends on external search engines and the current state of target websites.
+- This is a heuristic and operations-driven ranking system, not a large learned ranking model.
+- AI steps are optional and require `OPENAI_API_KEY`.
+- The repository contains historical scripts and utilities, so the public surface area is broader than the main product path.
+- The most clearly developed batch workflow is the Fukuoka-focused tooling in `tools/` and `config/`.
+- Some ops and experimental utilities are domain-specific and should be read as practical internal tooling, not as a polished packaged platform.
+
+## Related Repositories
+
+- `ai-sales-automation-system` - portfolio overview of the full workflow
+- `demo-generator` - generates tailored pages/assets from selected leads
+- `playwright-automation` - handles browser-based outreach execution
 
 ## License
 
-MIT License
+No license file is currently checked into this working tree.
