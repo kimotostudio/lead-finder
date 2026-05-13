@@ -1,0 +1,30 @@
+# Python caches and environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Local editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# Logs and operational run artifacts
+*.log
+ops_daily.log
+ops_runs/
+
+# Generated lead/output artifacts
+web_app/output/
+
+# Local/private data exports
+*.xlsx
+*.xls
+*.tmp
+
