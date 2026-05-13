@@ -125,6 +125,14 @@ CORPORATE_KEYWORDS = [
     '採用情報', '店舗一覧', 'フランチャイズ', '全国展開',
     '法人向け', '企業研修', 'BtoB', 'B2B',
     '多店舗', '全国チェーン', 'グループ会社',
+    '社会福祉法人', '公益社団法人', '一般社団法人',
+    '公益財団法人', '一般財団法人', 'NPO法人',
+    '連合会', '事業団',
+    '社会福祉協議会',
+    '商工会議所',
+    '協会',
+    '振興会',
+    '組合',
 ]
 
 # Aggregator / portal keywords
@@ -166,6 +174,21 @@ GOOD_LEAD_KEYWORDS = [
     'セッション', 'カウンセラー', 'セラピスト', 'コーチ',
 ]
 
+GLOBAL_MEDIA_NOISE_DOMAINS = {
+    'forbes.com',
+    'cnn.com',
+    'bbc.com',
+    'reuters.com',
+    'apnews.com',
+}
+
+LOCAL_BUSINESS_PATTERN_KEYWORDS = [
+    'サロン', '整体', '美容', 'カウンセリング', 'セラピー',
+    '個人', '完全予約', '予約制', '福岡', '北九州', '久留米',
+    '市', '区', '町', '村',
+    'salon', 'therapy', 'counseling', 'private', 'owner',
+]
+
 
 def _extract_domain(url: str) -> str:
     """Extract domain from URL, removing www prefix."""
@@ -186,6 +209,11 @@ def _check_keywords(text: str, keywords: list) -> bool:
     return any(kw.lower() in text_lower for kw in keywords)
 
 
+def _looks_like_local_business_pattern(url: str, title: str, text: str) -> bool:
+    combined = f"{url} {title} {text}"
+    return _check_keywords(combined, LOCAL_BUSINESS_PATTERN_KEYWORDS)
+
+
 def is_excluded_domain(url: str) -> Tuple[bool, str]:
     """
     Check if URL's domain is in hard exclusion list.
@@ -196,6 +224,20 @@ def is_excluded_domain(url: str) -> Tuple[bool, str]:
     domain = _extract_domain(url)
     if not domain:
         return False, ''
+
+    if domain.endswith('.go.jp') or domain.endswith('.lg.jp'):
+        return True, 'domain:gov_association'
+
+    if domain in OPS_AUTO_EXCLUDED_DOMAINS:
+        if domain in GLOBAL_MEDIA_NOISE_DOMAINS:
+            return False, ''
+        return True, f'excluded_domain:ops_auto:{domain}'
+
+    for excluded in OPS_AUTO_EXCLUDED_DOMAINS:
+        if domain.endswith('.' + excluded) or domain == excluded:
+            if excluded in GLOBAL_MEDIA_NOISE_DOMAINS:
+                continue
+            return True, f'excluded_domain:ops_auto:{excluded}'
 
     # Check exact match
     if domain in EXCLUDED_DOMAINS:
@@ -219,6 +261,20 @@ def is_excluded_domain(url: str) -> Tuple[bool, str]:
     except Exception:
         pass
 
+    return False, ''
+
+
+def is_global_media_noise(url: str, title: str, text: str) -> Tuple[bool, str]:
+    """Mark known global media domains as noise unless local business intent is clear."""
+    domain = _extract_domain(url)
+    if not domain:
+        return False, ''
+
+    for media_domain in GLOBAL_MEDIA_NOISE_DOMAINS:
+        if domain == media_domain or domain.endswith('.' + media_domain):
+            if _looks_like_local_business_pattern(url, title, text):
+                return False, ''
+            return True, f'domain:global_media:{media_domain}'
     return False, ''
 
 
@@ -314,26 +370,31 @@ def get_filter_reason(lead: Dict) -> Tuple[bool, str]:
         return True, reason
 
     # 2. Check explicit keyword blocks (portal names etc.)
+    excluded, reason = is_global_media_noise(url, title, text)
+    if excluded:
+        return True, reason
+
+    # 3. Check explicit keyword blocks (portal names etc.)
     excluded, reason = is_keyword_blocked(url, title, text)
     if excluded:
         return True, reason
 
-    # 3. Check job/recruiting (title/URL only — not full text)
+    # 4. Check job/recruiting (title/URL only — not full text)
     excluded, reason = is_job_page(url, title, '')
     if excluded:
         return True, reason
 
-    # 4. Check aggregator (title/URL only)
+    # 5. Check aggregator (title/URL only)
     excluded, reason = is_aggregator_page(url, title, text)
     if excluded:
         return True, reason
 
-    # 5. Check medical institution
+    # 6. Check medical institution
     excluded, reason = is_medical_institution(url, title, text)
     if excluded:
         return True, reason
 
-    # 6. Check corporate/franchise (title/URL only)
+    # 7. Check corporate/franchise (title/URL only)
     excluded, reason = is_corporate_site(url, title, text)
     if excluded:
         return True, reason
@@ -363,3 +424,15 @@ def filter_leads(leads: list) -> Tuple[list, list]:
             kept.append(lead)
 
     return kept, filtered
+
+# OPS_AUTO_BLOCKLIST_START
+OPS_AUTO_EXCLUDED_DOMAINS = {
+    'cars.usnews.com',
+    'city.fukuoka.lg.jp',
+    'forbes.com',
+    'gakushu.city.fukuoka.lg.jp',
+    'hitori-hitohana.city.fukuoka.lg.jp',
+    'moj.go.jp',
+    'umakamon.city.fukuoka.lg.jp',
+}
+# OPS_AUTO_BLOCKLIST_END

@@ -113,6 +113,16 @@ CORPORATE_KEYWORDS = {
     'フランチャイズ': -20,
 }
 
+# Media/news style (penalty, not exclusion)
+MEDIA_NOISE_KEYWORDS = {
+    'forbes.com': -20,
+    'reuters.com': -20,
+    'cnn.com': -20,
+    'bbc.com': -20,
+    'apnews.com': -20,
+    'ニュース': -8,
+}
+
 # ============================================================
 # SITE TYPE BONUSES
 # ============================================================
@@ -130,6 +140,18 @@ SITE_TYPE_BONUS = {
     'stores': 8,
     'wordpress': 5,  # Lower - can be anything
 }
+
+# Valid SMB platforms should not get thin-platform penalty.
+VALID_PLATFORM_ALLOWLIST = (
+    'wix',
+    'jimdo',
+    'peraichi',
+    'crayon',
+    'crayonsite',
+    'goope',
+)
+
+THIN_PLATFORM_PENALTY_HITS = ('ameblo', 'fc2', 'linktr.ee', 'note.com')
 
 
 def _count_keyword_score(text: str, keyword_scores: Dict[str, int]) -> Tuple[int, List[str]]:
@@ -228,8 +250,14 @@ def boost_score(lead: Dict) -> Tuple[int, List[str]]:
     # 8. Corporate penalty
     penalty, matched = _count_keyword_score(combined_text, CORPORATE_KEYWORDS)
     if penalty < 0:
-        total_boost += max(penalty, -25)
+        total_boost += max(penalty, -30)
         boost_reasons.append('△法人向け')
+
+    # 8b. Media/news penalty (soft)
+    penalty, matched = _count_keyword_score(f"{url} {combined_text}", MEDIA_NOISE_KEYWORDS)
+    if penalty < 0 and not _has_counseling_context(combined_text):
+        total_boost += max(penalty, -25)
+        boost_reasons.append('△メディア系')
 
     # 9. Penalize low-evidence pages: no pricing AND no profile
     reasons_field = lead.get('reasons', '') or ''
@@ -246,14 +274,15 @@ def boost_score(lead: Dict) -> Tuple[int, List[str]]:
 
     # 11. Penalize known thin-platforms unless other strong signals exist
     platform_lower = url.lower() if url else ''
-    platform_hits = ['ameblo', 'peraichi', 'fc2', 'linktr.ee', 'note.com']
-    for p in platform_hits:
-        if p in platform_lower or p in site_type_lower:
-            # only penalize lightly if there are no core service keywords
-            if not _has_counseling_context(combined_text):
-                total_boost -= 40
-                boost_reasons.append(f'penalize:platform_{p}')
-            break
+    has_valid_platform = any(p in platform_lower or p in site_type_lower for p in VALID_PLATFORM_ALLOWLIST)
+    if not has_valid_platform:
+        for p in THIN_PLATFORM_PENALTY_HITS:
+            if p in platform_lower or p in site_type_lower:
+                # only penalize lightly if there are no core service keywords
+                if not _has_counseling_context(combined_text):
+                    total_boost -= 40
+                    boost_reasons.append(f'penalize:platform_{p}')
+                break
 
     # 12. Booking detection: explicit reservation/booking words -> extra boost
     if '予約フォーム' in combined_text or 'オンライン予約' in combined_text or 'ご予約' in combined_text:

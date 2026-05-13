@@ -86,6 +86,9 @@ URL_COLS = (
     "URL",
     "url",
     "final_url",
+    "website",
+    "reference_url",
+    "domain",
     "contact_url",
     "original_url",
 )
@@ -131,6 +134,9 @@ CLASS_COLS = (
 SHOP_NAME_COLS = (
     "店舗名",
     "表示名",
+    "display_name",
+    "business_name",
+    "salon_name",
     "store_name",
     "shop_name",
     "name",
