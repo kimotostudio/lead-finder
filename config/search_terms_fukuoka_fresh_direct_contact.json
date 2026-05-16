@@ -1,0 +1,29 @@
+{
+  "city": "福岡市",
+  "areas": [
+    "福岡",
+    "福岡市",
+    "中央区",
+    "博多区",
+    "薬院",
+    "大名",
+    "今泉",
+    "西新",
+    "大橋"
+  ],
+  "queries": [
+    "福岡市 プライベートサロン 公式サイト お問い合わせ -ホットペッパー -Instagram -LINE -求人 -クリニック -病院",
+    "福岡市 自宅サロン 予約フォーム お問い合わせ -ホットペッパー -Instagram -LINE -求人 -クリニック",
+    "福岡市 アロマ トリートメント 個人サロン お問い合わせ -ホットペッパー -Instagram -LINE -求人",
+    "福岡市 リラクゼーション 個人サロン contact -ホットペッパー -Instagram -LINE -求人",
+    "福岡市 ネイル プライベートサロン お問い合わせフォーム -ホットペッパー -Instagram -LINE -求人",
+    "site:wixsite.com 福岡市 プライベートサロン お問い合わせ -求人 -クリニック",
+    "site:jimdofree.com 福岡市 サロン お問い合わせ -求人 -クリニック",
+    "site:peraichi.com 福岡市 サロン お問い合わせ -求人 -クリニック"
+  ],
+  "max_queries_default": 8,
+  "max_results_per_query_default": 4,
+  "parallel_workers_default": 2,
+  "sleep_sec_between_queries_default": 1.3,
+  "seed": 20260516
+}
