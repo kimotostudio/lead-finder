@@ -14,6 +14,11 @@ from pathlib import Path
 from typing import Iterable
 from urllib.parse import urlparse
 
+try:
+    from tools.display_name_cleaner import clean_display_name
+except ModuleNotFoundError:
+    from display_name_cleaner import clean_display_name
+
 
 NORMALIZED_FIELDS = [
     "lead_id",
@@ -26,6 +31,8 @@ NORMALIZED_FIELDS = [
     "name_confidence",
     "name_source",
     "name_warning",
+    "original_display_name",
+    "original_title",
     "website",
     "url",
     "reference_url",
@@ -437,8 +444,8 @@ def normalize_row(row: dict[str, str], *, source_csv: str, source_row: int) -> d
     website = _pick(row, WEBSITE_FIELDS)
     contact_url = _pick(row, CONTACT_FIELDS)
     domain = _extract_domain(_pick(row, ["domain"]), website, contact_url)
-    display = resolve_display_name(row, domain)
-    display_name = display["display_name"]
+    display = clean_display_name(row, domain)
+    display_name = display.display_name
     raw_business_name = _pick(row, ["business_name", "salon_name", "brand_name", "company_name", "name", "title", "店名", "名称"])
     business_name = display_name or raw_business_name or domain
     lead_id = _pick(row, ["lead_id", "id", "ID", "管理番号"])
@@ -453,14 +460,16 @@ def normalize_row(row: dict[str, str], *, source_csv: str, source_row: int) -> d
     normalized = {
         "lead_id": lead_id,
         "id": lead_id,
-        "company_name": _pick(row, ["company_name"]) or business_name,
+        "company_name": business_name,
         "business_name": business_name,
         "display_name": display_name,
-        "salon_name": _pick(row, ["salon_name", "サロン名"]) or business_name,
-        "brand_name": _pick(row, ["brand_name"]) or business_name,
-        "name_confidence": display["name_confidence"],
-        "name_source": display["name_source"],
-        "name_warning": display["name_warning"],
+        "salon_name": business_name,
+        "brand_name": business_name,
+        "name_confidence": display.name_confidence,
+        "name_source": display.name_source,
+        "name_warning": display.name_warning,
+        "original_display_name": display.original_display_name,
+        "original_title": display.original_title,
         "website": website,
         "url": website,
         "reference_url": website,

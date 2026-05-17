@@ -19,6 +19,11 @@ from typing import Iterable
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
+try:
+    from tools.display_name_cleaner import clean_row_names
+except ModuleNotFoundError:
+    from display_name_cleaner import clean_row_names
+
 
 JST = ZoneInfo("Asia/Tokyo")
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +47,8 @@ BASE_FIELDS = [
     "name_confidence",
     "name_source",
     "name_warning",
+    "original_display_name",
+    "original_title",
     "website",
     "url",
     "reference_url",
@@ -120,6 +127,8 @@ NOTES_FIELDS = ("notes", "reason", "original__reason", "営業ラベル理由", 
 
 NAME_CONFIDENCE_RANK = {"low": 0, "unknown": 0, "": 0, "medium": 1, "high": 2}
 LOW_NAME_VALUES = {"low", "unknown", "uncertain", "domain_fallback"}
+TITLE_DERIVED_SOURCE_VALUES = {"title", "site_title", "original__title", "original__original__title", "title_cleaned"}
+DOMAIN_DERIVED_SOURCE_VALUES = {"domain", "domain_fallback"}
 PRIVATE_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
 IGNORED_SCHEMES = {"tel", "mailto", "line", "sms", "javascript", "data"}
 
@@ -431,6 +440,8 @@ def _combined_text(row: dict[str, str]) -> str:
         *NAME_FIELDS,
         *TYPE_FIELDS,
         *NOTES_FIELDS,
+        "original_display_name",
+        "original_title",
         "original__title",
         "original__category_guess",
         "個人度分類",
@@ -562,33 +573,41 @@ def _normalize_row(row: dict[str, str], source_csv: Path, source_row: int) -> di
     explicit_contact = _pick(row, CONTACT_FIELDS)
     contact_url = explicit_contact or website
     domain = _extract_domain(_pick(row, DOMAIN_FIELDS), website, contact_url)
-    display_source = ""
-    display_name = ""
-    for key in NAME_FIELDS:
-        display_name = _pick(row, (key,))
-        if display_name:
-            display_source = key
-            break
-    confidence = _pick(row, ("name_confidence",))
-    warning = _pick(row, ("name_warning",))
-    if not confidence:
-        confidence, warning = _infer_name_confidence(display_name, display_source)
+    _name_row, name_result = clean_row_names(row, domain)
+    display_name = name_result.display_name
+    confidence = name_result.name_confidence
+    warning = name_result.name_warning
+    name_source = name_result.name_source
+    provided_confidence = _pick(row, ("name_confidence",))
+    provided_source = _pick(row, ("name_source",)).lower()
+    if provided_confidence and (
+        name_result.name_source == "explicit"
+        or provided_source in DOMAIN_DERIVED_SOURCE_VALUES
+        or (provided_confidence.lower() == "low" and provided_source not in TITLE_DERIVED_SOURCE_VALUES)
+    ):
+        confidence = provided_confidence
+        warning = _pick(row, ("name_warning",)) or warning
+        if provided_source in DOMAIN_DERIVED_SOURCE_VALUES:
+            name_source = "domain"
     business_name = display_name or domain
     lead_id = _pick(row, LEAD_ID_FIELDS) or _generated_lead_id(domain, business_name, source_row)
-    confidence, warning = _adjust_name_confidence_for_domain(confidence, warning, display_name, domain)
+    if name_source != "domain":
+        confidence, warning = _adjust_name_confidence_for_domain(confidence, warning, display_name, domain)
     score = _pick(row, SCORE_FIELDS)
     notes = _pick(row, NOTES_FIELDS)
     normalized = {
         "lead_id": lead_id,
         "id": lead_id,
-        "company_name": _pick(row, ("company_name",)) or business_name,
+        "company_name": business_name,
         "business_name": business_name,
         "display_name": display_name or domain,
-        "salon_name": _pick(row, ("salon_name", "サロン名")) or business_name,
-        "brand_name": _pick(row, ("brand_name",)) or business_name,
+        "salon_name": business_name,
+        "brand_name": business_name,
         "name_confidence": confidence,
-        "name_source": _pick(row, ("name_source",)) or display_source,
+        "name_source": name_source,
         "name_warning": warning,
+        "original_display_name": name_result.original_display_name,
+        "original_title": name_result.original_title,
         "website": website,
         "url": website,
         "reference_url": website,
