@@ -1,7 +1,7 @@
 import csv
 from pathlib import Path
 
-from tools.build_next_semi_auto_candidates import build_candidates
+from tools.build_next_semi_auto_candidates import build_candidate_evaluations, build_candidates
 
 
 def _write_csv(path: Path, rows: list[dict[str, str]]) -> None:
@@ -174,6 +174,176 @@ def test_build_candidates_filters_feedback_and_quality_issues(tmp_path: Path) ->
     assert counts["candidate_count"] == 1
     assert len(audit_rows) == 11
     assert "semi_auto_quality_score" in fieldnames
+
+
+def test_build_candidate_evaluations_assigns_tiers_without_dropping_reviewable_rows(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.csv"
+    feedback_path = tmp_path / "feedback.csv"
+    ledger_path = tmp_path / "ledger.csv"
+    blocklist_path = tmp_path / "blocklist_domains.txt"
+
+    _write_csv(
+        input_path,
+        [
+            {
+                "lead_id": "tier-a-1",
+                "display_name": "Strong Local Salon",
+                "website": "https://strong.example/",
+                "contact_url": "https://strong.example/contact/",
+                "score": "90",
+                "name_confidence": "high",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+            {
+                "lead_id": "weak-contact-1",
+                "display_name": "Weak Contact Salon",
+                "website": "https://weak-contact.example/",
+                "score": "80",
+                "name_confidence": "high",
+            },
+            {
+                "lead_id": "medium-name-1",
+                "display_name": "Medium Name Salon",
+                "website": "https://medium-name.example/",
+                "contact_url": "https://medium-name.example/contact/",
+                "score": "80",
+                "name_confidence": "medium",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+            {
+                "lead_id": "blocked-1",
+                "display_name": "Blocked Salon",
+                "website": "https://blocked.example/",
+                "contact_url": "https://blocked.example/contact/",
+                "score": "90",
+                "name_confidence": "high",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+        ],
+    )
+    _write_csv(feedback_path, [])
+    _write_csv(ledger_path, [])
+    blocklist_path.write_text("blocked.example\n", encoding="utf-8")
+
+    evaluations, counts, fieldnames = build_candidate_evaluations(
+        input_path=input_path,
+        feedback_path=feedback_path,
+        ledger_path=ledger_path,
+        blocklist_path=blocklist_path,
+        min_name_confidence="high",
+        min_quality_score=50,
+        limit=20,
+    )
+
+    by_id = {item.row["lead_id"]: item for item in evaluations}
+    assert by_id["tier-a-1"].lead_tier == "A"
+    assert by_id["weak-contact-1"].lead_tier == "B"
+    assert "weak_contact" in by_id["weak-contact-1"].review_reasons
+    assert by_id["weak-contact-1"].hard_exclusion_reasons == []
+    assert by_id["medium-name-1"].lead_tier == "B"
+    assert "medium_name_confidence" in by_id["medium-name-1"].review_reasons
+    assert by_id["blocked-1"].lead_tier == "C"
+    assert "blocklist_domain" in by_id["blocked-1"].hard_exclusion_reasons
+    assert counts["tier_a_count"] == 1
+    assert counts["tier_b_count"] == 2
+    assert counts["tier_c_count"] == 1
+    assert "lead_tier" in fieldnames
+    assert "review_reasons" in fieldnames
+
+
+def test_tier_b_promotion_policy_is_conservative_after_semi_auto_feedback(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.csv"
+    feedback_path = tmp_path / "feedback.csv"
+    ledger_path = tmp_path / "ledger.csv"
+
+    _write_csv(
+        input_path,
+        [
+            {
+                "lead_id": "promotable-medium-name",
+                "display_name": "Promotable Salon",
+                "website": "https://promotable.example/",
+                "contact_url": "https://promotable.example/contact/",
+                "score": "90",
+                "name_confidence": "medium",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+            {
+                "lead_id": "weak-anchor",
+                "display_name": "Peach Style Salon",
+                "website": "https://peach.example/",
+                "contact_url": "https://peach.example/#info",
+                "score": "90",
+                "name_confidence": "medium",
+                "original__has_contact_page": "true",
+            },
+            {
+                "lead_id": "toc-form",
+                "display_name": "Hora Style Salon",
+                "website": "https://hora.example/",
+                "contact_url": "https://hora.example/#section-28",
+                "score": "90",
+                "name_confidence": "high",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+            {
+                "lead_id": "external-booking",
+                "display_name": "Pluss Style Salon",
+                "website": "https://pluss.example/",
+                "contact_url": "https://appt.salondenet.jp/index.php?corpstr=pluss",
+                "score": "90",
+                "name_confidence": "medium",
+                "original__has_contact_page": "true",
+            },
+            {
+                "lead_id": "robots-feedback",
+                "display_name": "Robots Salon",
+                "website": "https://robots.example/contact/",
+                "contact_url": "https://robots.example/contact/",
+                "score": "90",
+                "name_confidence": "high",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+        ],
+    )
+    _write_csv(
+        feedback_path,
+        [
+            {
+                "lead_id": "robots-feedback",
+                "domain": "robots.example",
+                "failure_category": "robots_disallow",
+                "recommended_action": "improve_contact_url",
+            }
+        ],
+    )
+    _write_csv(ledger_path, [])
+
+    evaluations, _counts, fieldnames = build_candidate_evaluations(
+        input_path=input_path,
+        feedback_path=feedback_path,
+        ledger_path=ledger_path,
+        min_name_confidence="high",
+        min_quality_score=50,
+        limit=20,
+    )
+
+    by_id = {item.row["lead_id"]: item for item in evaluations}
+    assert by_id["promotable-medium-name"].lead_tier == "B"
+    assert by_id["promotable-medium-name"].row["tier_b_promotion_decision"] == "promote_to_demo"
+    assert by_id["weak-anchor"].row["tier_b_promotion_decision"] == "keep_for_manual_review"
+    assert by_id["toc-form"].row["tier_b_promotion_decision"] == "keep_for_manual_review"
+    assert by_id["external-booking"].row["tier_b_promotion_decision"] == "exclude"
+    assert by_id["external-booking"].row["tier_b_promotion_action"] == "exclude_from_automated_path"
+    assert by_id["robots-feedback"].lead_tier == "C"
+    assert by_id["robots-feedback"].row["tier_b_promotion_decision"] == "exclude"
+    assert "tier_b_promotion_decision" in fieldnames
 
 
 def test_build_candidates_can_require_location_token(tmp_path: Path) -> None:
