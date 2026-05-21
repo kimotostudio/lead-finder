@@ -312,6 +312,13 @@ def classify_failure(
     )
     if blocklisted or cooldown or "blocked_domain" in reason or "bot_protection" in combined:
         return "blocked_domain"
+    if (
+        "iframe_only_form" in combined
+        or "embedded_or_external_form" in combined
+        or "external_form" in combined
+        or "manual_review_embedded_iframe_form" in combined
+    ):
+        return "external_form"
     if "timeout_contact" in combined:
         return "timeout_contact"
     if "no_form_fields" in combined:
@@ -322,7 +329,11 @@ def classify_failure(
         return "corporate_or_portal"
     if contact_url_quality_issue(source_row) == "weak_contact_url" or "weak_contact_url" in combined:
         return "weak_contact_url"
-    if str(pick(source_row, ("name_confidence",))).lower() in {"low", "unknown"} or pick(source_row, ("name_warning",)):
+    name_confidence = str(pick(source_row, ("name_confidence",))).lower()
+    name_warning = str(pick(source_row, ("name_warning",))).lower()
+    if name_confidence in {"low", "unknown"} or any(
+        token in name_warning for token in ("human_review", "manual_review", "low_confidence")
+    ):
         return "low_confidence_name"
     return "none"
 
@@ -335,6 +346,8 @@ def recommendation_for(status: str, failure_category: str, feedback: dict[str, s
         return "block"
     if failure_category == "timeout_contact":
         return "retry_later"
+    if failure_category == "external_form":
+        return "manual_review"
     if failure_category in {"no_form_fields", "weak_contact_url"}:
         return "improve_contact_url"
     if failure_category in {"media_or_listing_page", "corporate_or_portal", "low_confidence_name"}:
@@ -355,6 +368,8 @@ def score_adjustments(status: str, failure_category: str, feedback: dict[str, st
         bonus = max(bonus, 20)
     if failure_category == "weak_contact_url":
         penalty = max(penalty, 25)
+    elif failure_category == "external_form":
+        penalty = max(penalty, 40)
     elif failure_category == "low_confidence_name":
         penalty = max(penalty, 15)
     elif failure_category in {"no_form_fields", "timeout_contact"}:
@@ -364,6 +379,13 @@ def score_adjustments(status: str, failure_category: str, feedback: dict[str, st
     elif failure_category == "blocked_domain":
         penalty = max(penalty, 100)
     return str(bonus), str(penalty)
+
+
+def outcome_for(status: str) -> str:
+    """Classify automation workflow outcome without implying sales conversion."""
+    if status == "prepared_full":
+        return "workflow_success"
+    return "unknown"
 
 
 def load_feedback_rows(results_dir: Path) -> list[dict[str, str]]:
@@ -470,7 +492,7 @@ def build_feedback(
                 "recommended_action": recommended_action,
                 "lead_selection_bonus": bonus,
                 "lead_selection_penalty": penalty,
-                "outcome": "unknown",
+                "outcome": outcome_for(status),
                 "outcome_source": "semi_auto_feedback" if status or reason else "unknown",
                 "run_date": row_date,
             }

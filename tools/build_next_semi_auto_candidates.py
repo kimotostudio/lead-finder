@@ -241,6 +241,7 @@ AUTOMATION_HARD_FAILURE_CATEGORIES = {
     "robots_txt_disallow",
 }
 TIER_B_MANUAL_REVIEW_REASONS = {
+    "feedback_external_form",
     "weak_contact",
     "toc_anchor_contact",
     "external_contact",
@@ -916,6 +917,8 @@ def _evaluate_row(
         issues.append("unsuitable_content")
     if weak_contact:
         issues.append("weak_contact")
+    if _reason_key(failure_category) in {"external_form", "iframe_only_form"}:
+        issues.append("external_form")
     if not website_ok:
         issues.append("no_usable_website")
     if non_web_contact:
@@ -1020,6 +1023,8 @@ def _evaluate_row(
     review_reasons: list[str] = []
     if feedback_action == "deprioritize" and not feedback_hard_exclude:
         review_reasons.append(f"feedback_deprioritize:{feedback_exclusion or 'prior_outcome'}")
+    if _reason_key(failure_category) in {"external_form", "iframe_only_form"} and not hard_exclusion_reasons:
+        review_reasons.append("feedback_external_form")
     if weak_contact and not any(_reason_key(reason) in {"line_or_sns", "portal_listing", "non_web_contact", "no_usable_website"} for reason in hard_exclusion_reasons):
         review_reasons.append("weak_contact")
     if toc_anchor:

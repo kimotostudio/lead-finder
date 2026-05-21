@@ -55,6 +55,15 @@ def test_build_feedback_classifies_prepared_manual_and_blocked(tmp_path: Path) -
                 "website": "https://blocked.example/",
                 "score": "70",
             },
+            {
+                "lead_id": "iframe-1",
+                "domain": "iframe.example",
+                "display_name": "Iframe Studio",
+                "name_confidence": "high",
+                "contact_url": "https://iframe.example/contact/",
+                "website": "https://iframe.example/",
+                "score": "70",
+            },
         ],
     )
     _write_csv(
@@ -86,7 +95,15 @@ def test_build_feedback_classifies_prepared_manual_and_blocked(tmp_path: Path) -
                 "domain": "blocked.example",
                 "status": "skipped_bot_protection",
                 "message": "blocked_domain:blocked.example",
-            }
+            },
+            {
+                "timestamp": "2026-01-01 10:05:00",
+                "salon_id": "iframe-1",
+                "domain": "iframe.example",
+                "status": "prepared_review_needed",
+                "message": "iframe_only_form",
+                "evidence": "iframe_form_detected_needs_review:providers=reserva",
+            },
         ],
     )
     _write_csv(ledger_path, [])
@@ -105,8 +122,11 @@ def test_build_feedback_classifies_prepared_manual_and_blocked(tmp_path: Path) -
     by_id = {row["lead_id"]: row for row in rows}
     assert by_id["good-1"]["prepared_success"] == "1"
     assert by_id["good-1"]["recommended_action"] == "prioritize_similar"
-    assert by_id["good-1"]["outcome"] == "unknown"
+    assert by_id["good-1"]["outcome"] == "workflow_success"
     assert by_id["toc-1"]["failure_category"] == "no_form_fields"
     assert by_id["toc-1"]["recommended_action"] == "improve_contact_url"
     assert by_id["blocked-1"]["failure_category"] == "blocked_domain"
     assert by_id["blocked-1"]["recommended_action"] == "block"
+    assert by_id["iframe-1"]["failure_category"] == "external_form"
+    assert by_id["iframe-1"]["recommended_action"] == "manual_review"
+    assert by_id["iframe-1"]["manual_review_needed"] == "1"

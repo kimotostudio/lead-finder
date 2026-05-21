@@ -222,9 +222,30 @@ def test_build_candidate_evaluations_assigns_tiers_without_dropping_reviewable_r
                 "original__has_contact_page": "true",
                 "original__has_form": "true",
             },
+            {
+                "lead_id": "external-form-1",
+                "display_name": "External Form Studio",
+                "website": "https://external-form.example/",
+                "contact_url": "https://external-form.example/contact/",
+                "score": "90",
+                "name_confidence": "high",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
         ],
     )
-    _write_csv(feedback_path, [])
+    _write_csv(
+        feedback_path,
+        [
+            {
+                "lead_id": "external-form-1",
+                "domain": "external-form.example",
+                "failure_category": "external_form",
+                "recommended_action": "manual_review",
+                "lead_selection_penalty": "40",
+            }
+        ],
+    )
     _write_csv(ledger_path, [])
     blocklist_path.write_text("blocked.example\n", encoding="utf-8")
 
@@ -247,8 +268,10 @@ def test_build_candidate_evaluations_assigns_tiers_without_dropping_reviewable_r
     assert "medium_name_confidence" in by_id["medium-name-1"].review_reasons
     assert by_id["blocked-1"].lead_tier == "C"
     assert "blocklist_domain" in by_id["blocked-1"].hard_exclusion_reasons
+    assert by_id["external-form-1"].lead_tier == "B"
+    assert "feedback_external_form" in by_id["external-form-1"].review_reasons
     assert counts["tier_a_count"] == 1
-    assert counts["tier_b_count"] == 2
+    assert counts["tier_b_count"] == 3
     assert counts["tier_c_count"] == 1
     assert "lead_tier" in fieldnames
     assert "review_reasons" in fieldnames
