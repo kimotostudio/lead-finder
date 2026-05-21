@@ -65,6 +65,7 @@ EXCLUDED_DOMAINS = {
     'facebook.com',
     'tiktok.com',
     'youtube.com',
+    'lin.ee',
     'line.me',
     'linkedin.com',
     'pinterest.com',
@@ -122,6 +123,7 @@ MEDICAL_KEYWORDS = [
 # Corporate / franchise keywords
 CORPORATE_KEYWORDS = [
     '株式会社', '(株)', '有限会社', '合同会社', 'LLC',
+    'Inc.', 'Corporation', 'Ltd.', 'Company',
     '採用情報', '店舗一覧', 'フランチャイズ', '全国展開',
     '法人向け', '企業研修', 'BtoB', 'B2B',
     '多店舗', '全国チェーン', 'グループ会社',
@@ -140,6 +142,7 @@ AGGREGATOR_KEYWORDS = [
     'おすすめ', 'ランキング', '比較', '一覧', 'まとめ',
     '口コミ', 'レビュー', '評価', '人気', 'TOP',
     '選', 'BEST', '厳選', '徹底比較', '完全ガイド',
+    '掲載', '広告', '媒体', 'ポータル', 'portal', 'listing', 'directory',
 ]
 
 # Additional explicit keyword blocks (title/snippet)
@@ -153,6 +156,8 @@ KEYWORD_BLOCKLIST = [
     'linktr.ee',
     '求人',
     '医療法人',
+    'findglocal',
+    'minimodel',
     # Note: ペライチ and amebaownd removed - peraichi is solo-friendly,
     # amebaownd is blocked by domain filter
 ]

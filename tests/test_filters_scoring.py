@@ -76,6 +76,18 @@ def test_additional_blocked_domains_and_keywords():
     assert is_filtered
     assert 'instagram.com' in reason
 
+    # LINE short links should be blocked before SEMI_AUTO candidate selection.
+    lead = make_lead(url='https://lin.ee/abc123', title='LINE予約')
+    is_filtered, reason = get_filter_reason(lead)
+    assert is_filtered
+    assert 'lin.ee' in reason
+
+    # Local listing/media portals should be blocked from source output.
+    lead = make_lead(url='https://findglocal.com/JP/Fukuoka', title='掲載情報')
+    is_filtered, reason = get_filter_reason(lead)
+    assert is_filtered
+    assert 'findglocal' in reason or 'blocked_keyword' in reason
+
     # google maps URL should be blocked
     lead = make_lead(url='https://www.google.com/maps/place/SomePlace', title='地図')
     is_filtered, reason = get_filter_reason(lead)
@@ -113,3 +125,10 @@ def test_global_media_domain_filtered_unless_local_pattern():
     is_filtered, reason = get_filter_reason(local_like)
     assert not is_filtered
     assert reason == ''
+
+
+def test_english_corporate_terms_excluded():
+    lead = make_lead(url='https://example.com', title='Example Salon Inc.')
+    is_filtered, reason = get_filter_reason(lead)
+    assert is_filtered
+    assert reason == 'corporate_franchise'
