@@ -277,6 +277,57 @@ def test_build_candidate_evaluations_assigns_tiers_without_dropping_reviewable_r
     assert "review_reasons" in fieldnames
 
 
+def test_chain_hosts_are_excluded_from_tier_a(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.csv"
+    feedback_path = tmp_path / "feedback.csv"
+    ledger_path = tmp_path / "ledger.csv"
+
+    _write_csv(
+        input_path,
+        [
+            {
+                "lead_id": "nova-chain",
+                "display_name": "駅前留学NOVA【公式】英会話スクール",
+                "website": "https://www.nova.co.jp/",
+                "contact_url": "https://www.nova.co.jp/contact/",
+                "score": "90",
+                "name_confidence": "high",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+            {
+                "lead_id": "pilates-chain",
+                "display_name": "マシンピラティス専門スタジオ",
+                "website": "https://pilates-k.jp/",
+                "contact_url": "https://pilates-k.jp/contact/",
+                "score": "90",
+                "name_confidence": "high",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+        ],
+    )
+    _write_csv(feedback_path, [])
+    _write_csv(ledger_path, [])
+
+    evaluations, counts, _fieldnames = build_candidate_evaluations(
+        input_path=input_path,
+        feedback_path=feedback_path,
+        ledger_path=ledger_path,
+        min_name_confidence="high",
+        min_quality_score=50,
+        limit=20,
+    )
+
+    by_id = {item.row["lead_id"]: item for item in evaluations}
+    assert by_id["nova-chain"].lead_tier == "C"
+    assert by_id["pilates-chain"].lead_tier == "C"
+    assert "corporate_like" in by_id["nova-chain"].hard_exclusion_reasons
+    assert "corporate_like" in by_id["pilates-chain"].hard_exclusion_reasons
+    assert counts["tier_a_count"] == 0
+    assert counts["tier_c_count"] == 2
+
+
 def test_tier_b_promotion_policy_is_conservative_after_semi_auto_feedback(tmp_path: Path) -> None:
     input_path = tmp_path / "input.csv"
     feedback_path = tmp_path / "feedback.csv"

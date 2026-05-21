@@ -161,6 +161,12 @@ CORPORATE_TOKENS = [
     "多店舗",
     "グループ",
 ]
+CORPORATE_CHAIN_HOSTS = [
+    "kobekyo.com",
+    "nova.co.jp",
+    "pilates-k.jp",
+    "m-pilates.com",
+]
 MEDICAL_TOKENS = [
     "医療",
     "医療法人",
@@ -864,6 +870,9 @@ def _evaluate_row(
     website_ok = _is_web_url(website or contact_url)
     corporate_like = (
         _contains_any(text, CORPORATE_TOKENS)
+        or _host_matches(domain, CORPORATE_CHAIN_HOSTS)
+        or _host_matches(_host(website), CORPORATE_CHAIN_HOSTS)
+        or _host_matches(contact_host, CORPORATE_CHAIN_HOSTS)
         or "corporate" in _pick(row, ("個人度分類", "original__個人度分類")).lower()
         or _truthy(_pick(row, ("法人語検出", "original__法人語検出")))
     )
