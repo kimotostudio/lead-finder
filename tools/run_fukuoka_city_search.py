@@ -72,6 +72,7 @@ OUTPUT_COLUMNS = [
     "has_line",
     "address",
     "area_guess",
+    "score",
     "solo_score",
     "reason",
 ]
@@ -286,6 +287,7 @@ def _extract_output_row(lead: dict[str, Any], areas: list[str]) -> dict[str, Any
         "has_line": bool(has_line),
         "address": str(lead.get("address", "")),
         "area_guess": area_guess or str(lead.get("city", "")),
+        "score": lead.get("score", ""),
         "solo_score": solo_score,
         "reason": " | ".join(reason_tokens),
     }
