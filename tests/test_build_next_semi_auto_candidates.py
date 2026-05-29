@@ -1,5 +1,7 @@
 import csv
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from tools.build_next_semi_auto_candidates import build_candidate_evaluations, build_candidates
 
@@ -508,6 +510,167 @@ def test_chain_hosts_are_excluded_from_tier_a(tmp_path: Path) -> None:
     assert "corporate_like" in by_id["nova-chain"].hard_exclusion_reasons
     assert "corporate_like" in by_id["pilates-chain"].hard_exclusion_reasons
     assert counts["tier_a_count"] == 0
+    assert counts["tier_c_count"] == 2
+
+
+def test_prepared_duplicates_are_reviewable_unless_same_day_or_blocked(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.csv"
+    feedback_path = tmp_path / "feedback.csv"
+    ledger_path = tmp_path / "ledger.csv"
+    today = datetime.now(ZoneInfo("Asia/Tokyo")).date()
+    prior_day = today - timedelta(days=9)
+
+    _write_csv(
+        input_path,
+        [
+            {
+                "lead_id": "prior-prepared",
+                "display_name": "Prior Prepared Salon",
+                "website": "https://prior-prepared.example/",
+                "contact_url": "https://prior-prepared.example/contact/",
+                "score": "90",
+                "name_confidence": "high",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+            {
+                "lead_id": "today-prepared",
+                "display_name": "Today Prepared Salon",
+                "website": "https://today-prepared.example/",
+                "contact_url": "https://today-prepared.example/contact/",
+                "score": "90",
+                "name_confidence": "high",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+            {
+                "lead_id": "blocked-duplicate",
+                "display_name": "Blocked Duplicate Salon",
+                "website": "https://blocked-duplicate.example/",
+                "contact_url": "https://blocked-duplicate.example/contact/",
+                "score": "90",
+                "name_confidence": "high",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+        ],
+    )
+    _write_csv(feedback_path, [])
+    _write_csv(
+        ledger_path,
+        [
+            {
+                "timestamp": f"{prior_day.isoformat()} 10:00:00",
+                "salon_id": "prior-prepared",
+                "domain": "prior-prepared.example",
+                "status": "prepared_full",
+                "reason": "semi_auto_prepared",
+            },
+            {
+                "timestamp": f"{today.isoformat()} 10:00:00",
+                "salon_id": "today-prepared",
+                "domain": "today-prepared.example",
+                "status": "prepared_full",
+                "reason": "semi_auto_prepared",
+            },
+            {
+                "timestamp": f"{prior_day.isoformat()} 10:00:00",
+                "salon_id": "blocked-duplicate",
+                "domain": "blocked-duplicate.example",
+                "status": "skipped_bot_protection",
+                "reason": "bot_protection",
+            },
+        ],
+    )
+
+    evaluations, counts, _fieldnames = build_candidate_evaluations(
+        input_path=input_path,
+        feedback_path=feedback_path,
+        ledger_path=ledger_path,
+        min_name_confidence="high",
+        min_quality_score=50,
+        limit=20,
+    )
+
+    by_id = {item.row["lead_id"]: item for item in evaluations}
+    assert by_id["prior-prepared"].lead_tier == "B"
+    assert by_id["prior-prepared"].hard_exclusion_reasons == []
+    assert "prior_prepared_review" in by_id["prior-prepared"].review_reasons
+    assert by_id["today-prepared"].lead_tier == "C"
+    assert "duplicate_ledger_today" in by_id["today-prepared"].hard_exclusion_reasons
+    assert by_id["blocked-duplicate"].lead_tier == "C"
+    assert "duplicate_ledger_blocked" in by_id["blocked-duplicate"].hard_exclusion_reasons
+    assert counts["tier_b_count"] == 1
+    assert counts["tier_c_count"] == 2
+
+
+def test_weak_corporate_simple_builder_is_reviewable_but_strong_chain_and_blocklist_stay_tier_c(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.csv"
+    feedback_path = tmp_path / "feedback.csv"
+    ledger_path = tmp_path / "ledger.csv"
+    blocklist_path = tmp_path / "blocklist_domains.txt"
+
+    _write_csv(
+        input_path,
+        [
+            {
+                "lead_id": "weak-corp-builder",
+                "display_name": "福岡プライベートサロン 株式会社",
+                "website": "https://small-salon.jimdofree.com/",
+                "contact_url": "https://small-salon.jimdofree.com/contact/",
+                "score": "80",
+                "name_confidence": "high",
+                "site_type": "jimdofree",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+            {
+                "lead_id": "strong-chain",
+                "display_name": "駅前留学NOVA【公式】英会話スクール",
+                "website": "https://www.nova.co.jp/",
+                "contact_url": "https://www.nova.co.jp/contact/",
+                "score": "90",
+                "name_confidence": "high",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+            {
+                "lead_id": "blocked-builder",
+                "display_name": "Blocked Builder Salon",
+                "website": "https://blocked-builder.jimdofree.com/",
+                "contact_url": "https://blocked-builder.jimdofree.com/contact/",
+                "score": "90",
+                "name_confidence": "high",
+                "site_type": "jimdofree",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+        ],
+    )
+    _write_csv(feedback_path, [])
+    _write_csv(ledger_path, [])
+    blocklist_path.write_text("blocked-builder.jimdofree.com\n", encoding="utf-8")
+
+    evaluations, counts, _fieldnames = build_candidate_evaluations(
+        input_path=input_path,
+        feedback_path=feedback_path,
+        ledger_path=ledger_path,
+        blocklist_path=blocklist_path,
+        min_name_confidence="high",
+        min_quality_score=50,
+        limit=20,
+    )
+
+    by_id = {item.row["lead_id"]: item for item in evaluations}
+    assert by_id["weak-corp-builder"].lead_tier == "B"
+    assert by_id["weak-corp-builder"].hard_exclusion_reasons == []
+    assert "weak_corporate_like" in by_id["weak-corp-builder"].review_reasons
+    assert by_id["weak-corp-builder"].row["simple_builder_signal"] == "1"
+    assert by_id["strong-chain"].lead_tier == "C"
+    assert "corporate_like" in by_id["strong-chain"].hard_exclusion_reasons
+    assert by_id["blocked-builder"].lead_tier == "C"
+    assert "blocklist_domain" in by_id["blocked-builder"].hard_exclusion_reasons
+    assert counts["tier_b_count"] == 1
     assert counts["tier_c_count"] == 2
 
 

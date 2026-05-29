@@ -13,7 +13,7 @@ import json
 import re
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Iterable
 from urllib.parse import urlparse
@@ -163,11 +163,57 @@ CORPORATE_TOKENS = [
     "多店舗",
     "グループ",
 ]
+STRONG_CORPORATE_TOKENS = [
+    "採用情報",
+    "店舗一覧",
+    "フランチャイズ",
+    "全国展開",
+    "多店舗",
+    "グループ会社",
+    "世界最大級",
+    "大手",
+    "駅前留学nova",
+]
 CORPORATE_CHAIN_HOSTS = [
     "kobekyo.com",
     "nova.co.jp",
+    "ecc.jp",
+    "shane.co.jp",
     "pilates-k.jp",
     "m-pilates.com",
+    "queensway-group.jp",
+    "urbanclassic.jp",
+]
+LOCAL_SERVICE_TOKENS = [
+    "サロン",
+    "整体",
+    "リラクゼーション",
+    "ヨガ",
+    "ピラティス",
+    "エステ",
+    "美容",
+    "カウンセリング",
+    "ヒーリング",
+    "レイキ",
+    "占い",
+    "教室",
+    "福岡",
+    "中央区",
+    "博多区",
+    "薬院",
+    "大名",
+    "天神",
+]
+SMALL_BUSINESS_TOKENS = [
+    "個人",
+    "プライベート",
+    "小さな",
+    "完全予約制",
+    "予約制",
+    "自宅",
+    "マンツーマン",
+    "少人数",
+    "公式",
 ]
 MEDICAL_TOKENS = [
     "医療",
@@ -291,7 +337,6 @@ EXTERNAL_RESERVATION_TOKENS = [
 ]
 AUTOMATION_HARD_FAILURE_CATEGORIES = {
     "blocked_domain",
-    "no_form_fields",
     "timeout_contact",
     "media_or_listing_page",
     "corporate_or_portal",
@@ -301,6 +346,9 @@ AUTOMATION_HARD_FAILURE_CATEGORIES = {
 }
 TIER_B_MANUAL_REVIEW_REASONS = {
     "feedback_external_form",
+    "feedback_no_form_fields",
+    "prior_prepared_review",
+    "weak_corporate_like",
     "weak_contact",
     "toc_anchor_contact",
     "external_contact",
@@ -402,6 +450,16 @@ class CandidateEval:
     review_reasons: list[str]
     hard_exclusion_reasons: list[str]
     lead_tier: str
+
+
+@dataclass(frozen=True)
+class TouchRecord:
+    lead_id: str
+    domain: str
+    status: str
+    reason: str
+    timestamp: str
+    source: str
 
 
 def _dedupe(items: Iterable[str]) -> list[str]:
@@ -507,6 +565,23 @@ def _domain_matches(domain: str, known_domains: Iterable[str]) -> bool:
 def _contains_any(text: str, tokens: Iterable[str]) -> bool:
     haystack = str(text or "").lower()
     return any(token.lower() in haystack for token in tokens)
+
+
+def _has_local_service_signal(text: str) -> bool:
+    return _contains_any(text, LOCAL_SERVICE_TOKENS)
+
+
+def _has_small_business_signal(text: str) -> bool:
+    return _contains_any(text, SMALL_BUSINESS_TOKENS)
+
+
+def _is_strong_corporate_like(domain: str, website: str, contact_host: str, text: str) -> bool:
+    return (
+        _host_matches(domain, CORPORATE_CHAIN_HOSTS)
+        or _host_matches(_host(website), CORPORATE_CHAIN_HOSTS)
+        or _host_matches(contact_host, CORPORATE_CHAIN_HOSTS)
+        or _contains_any(text, STRONG_CORPORATE_TOKENS)
+    )
 
 
 def _is_simple_builder_site(row: dict[str, str], domain: str, website: str, contact_url: str) -> bool:
@@ -816,6 +891,124 @@ def _load_active_cooldown_domains(path: Path, now: datetime | None = None) -> se
     return domains
 
 
+def _touch_record_from_row(row: dict[str, str], source: str) -> TouchRecord:
+    status = _pick(row, ("status", "final_status", "semi_auto_status"))
+    reason = _pick(row, ("reason", "message", "semi_auto_reason", "reason_ja", "evidence", "notes"))
+    return TouchRecord(
+        lead_id=_pick(row, ("salon_id", "lead_id", "id")),
+        domain=_clean_domain(_pick(row, ("domain", "contact_url", "final_step_url", "url"))),
+        status=status,
+        reason=reason,
+        timestamp=_pick(row, ("timestamp", "created_at", "updated_at")),
+        source=source,
+    )
+
+
+def _load_touch_records(paths: Iterable[Path]) -> tuple[dict[str, list[TouchRecord]], dict[str, list[TouchRecord]]]:
+    by_id: dict[str, list[TouchRecord]] = {}
+    by_domain: dict[str, list[TouchRecord]] = {}
+    for path in paths:
+        if not path:
+            continue
+        for row in _read_csv(path):
+            record = _touch_record_from_row(row, str(path))
+            if record.lead_id:
+                by_id.setdefault(record.lead_id, []).append(record)
+            if record.domain:
+                by_domain.setdefault(record.domain, []).append(record)
+    return by_id, by_domain
+
+
+def _matching_touch_records(
+    *,
+    lead_id: str,
+    domain: str,
+    records_by_id: dict[str, list[TouchRecord]],
+    records_by_domain: dict[str, list[TouchRecord]],
+) -> list[TouchRecord]:
+    records: list[TouchRecord] = list(records_by_id.get(lead_id, []))
+    target = _clean_domain(domain)
+    for known_domain, domain_records in records_by_domain.items():
+        if target and (target == known_domain or target.endswith(f".{known_domain}") or known_domain.endswith(f".{target}")):
+            records.extend(domain_records)
+    return _dedupe_touch_records(records)
+
+
+def _dedupe_touch_records(records: Iterable[TouchRecord]) -> list[TouchRecord]:
+    seen: set[tuple[str, str, str, str, str]] = set()
+    out: list[TouchRecord] = []
+    for record in records:
+        key = (record.lead_id, record.domain, record.status, record.reason, record.timestamp)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(record)
+    return out
+
+
+def _record_date(record: TouchRecord) -> date | None:
+    text = str(record.timestamp or "").strip()
+    if not text:
+        return None
+    normalized = text.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(normalized).date()
+    except ValueError:
+        match = re.match(r"(\d{4}-\d{2}-\d{2})", text)
+        if match:
+            try:
+                return date.fromisoformat(match.group(1))
+            except ValueError:
+                return None
+    return None
+
+
+def _duplicate_policy(records: list[TouchRecord], today: date) -> tuple[str, str, str]:
+    if not records:
+        return "", "", ""
+
+    for record in records:
+        text = f"{record.status} {record.reason}".lower()
+        if any(token in text for token in ("sent", "submitted", "final_submitted", "message_sent", "送信済")):
+            return "duplicate_ledger_submitted", "", "sent_or_submitted"
+        if any(token in text for token in ("blocked", "bot_protection", "captcha", "skipped_bot_protection")):
+            return "duplicate_ledger_blocked", "", "blocked_or_bot_protection"
+
+    for record in records:
+        text = f"{record.status} {record.reason}".lower()
+        is_prepared_like = any(
+            token in text
+            for token in (
+                "prepared_full",
+                "prepared_review_needed",
+                "semi_auto_prepared",
+                "manual_review_needed",
+                "no_form_fields",
+                "iframe_only_form",
+            )
+        )
+        record_date = _record_date(record)
+        if is_prepared_like and record_date == today:
+            return "duplicate_ledger_today", "", "already_prepared_today"
+
+    for record in records:
+        text = f"{record.status} {record.reason}".lower()
+        if _record_date(record) and any(
+            token in text
+            for token in (
+                "prepared_full",
+                "prepared_review_needed",
+                "semi_auto_prepared",
+                "manual_review_needed",
+                "no_form_fields",
+                "iframe_only_form",
+            )
+        ):
+            return "", "prior_prepared_review", "previously_prepared"
+
+    return "duplicate_ledger", "", "prior_touch_unknown"
+
+
 def _load_ledger_keys(path: Path) -> tuple[set[str], set[str]]:
     ids: set[str] = set()
     domains: set[str] = set()
@@ -927,6 +1120,8 @@ def _evaluate_row(
     feedback_by_domain: dict[str, dict[str, str]],
     ledger_ids: set[str],
     ledger_domains: set[str],
+    touch_records_by_id: dict[str, list[TouchRecord]],
+    touch_records_by_domain: dict[str, list[TouchRecord]],
     blocklist_domains: set[str],
     cooldown_domains: set[str],
     include_ledger_domains: bool,
@@ -995,6 +1190,9 @@ def _evaluate_row(
     medical_like = _contains_any(text, MEDICAL_TOKENS)
     line_sns = _host_matches(domain, LINE_SNS_HOSTS) or _host_matches(contact_host, LINE_SNS_HOSTS)
     simple_builder = _is_simple_builder_site(row, domain, website, contact_url)
+    strong_corporate_like = _is_strong_corporate_like(domain, website, contact_host, text)
+    local_service_signal = _has_local_service_signal(text)
+    small_business_signal = _has_small_business_signal(text)
     portal_host = _host_matches(domain, PORTAL_HOSTS) or _host_matches(contact_host, PORTAL_HOSTS)
     portal_text = _contains_any(text, PORTAL_TOKENS)
     strict_portal_text = _contains_any(text, STRICT_PORTAL_TOKENS)
@@ -1027,7 +1225,29 @@ def _evaluate_row(
         weak_contact = True
     blocklisted = _domain_matches(domain, blocklist_domains)
     cooldown = _domain_matches(domain, cooldown_domains)
-    duplicate_ledger = not include_ledger_domains and (lead_id in ledger_ids or _host_matches(domain, ledger_domains))
+    duplicate_records = [] if include_ledger_domains else _matching_touch_records(
+        lead_id=lead_id,
+        domain=domain,
+        records_by_id=touch_records_by_id,
+        records_by_domain=touch_records_by_domain,
+    )
+    duplicate_hard_reason, duplicate_review_reason, duplicate_note = _duplicate_policy(
+        duplicate_records,
+        datetime.now(JST).date(),
+    )
+    duplicate_ledger = bool(duplicate_hard_reason or duplicate_review_reason)
+    corporate_reviewable = bool(
+        corporate_like
+        and not strong_corporate_like
+        and not medical_like
+        and not portal_listing
+        and not line_sns
+        and (
+            simple_builder
+            or (local_service_signal and (has_contact_signal or direct_contact or good_contact_path))
+            or (small_business_signal and website_ok)
+        )
+    )
     feedback_hard_exclude = (
         feedback_action in {"exclude", "block"}
         or raw_feedback_penalty <= -100
@@ -1088,6 +1308,8 @@ def _evaluate_row(
         quality_score -= 30
     if corporate_like:
         quality_score -= 45
+        if corporate_reviewable:
+            quality_score += 25
     if medical_like:
         quality_score -= 65
     if line_sns:
@@ -1115,11 +1337,13 @@ def _evaluate_row(
         exclusion_reasons.append("blocklist_domain")
     if cooldown and not include_cooldown_domains:
         exclusion_reasons.append("cooldown_domain")
-    if duplicate_ledger:
-        exclusion_reasons.append("duplicate_ledger")
+    if duplicate_hard_reason:
+        exclusion_reasons.append(duplicate_hard_reason)
+    elif duplicate_review_reason:
+        exclusion_reasons.append(duplicate_review_reason)
     if feedback_hard_exclude or feedback_action == "deprioritize":
         exclusion_reasons.append(f"feedback_exclude:{feedback_exclusion or 'prior_outcome'}")
-    if corporate_like and not allow_corporate:
+    if corporate_like and not allow_corporate and not corporate_reviewable:
         exclusion_reasons.append("corporate_like")
     if medical_like:
         exclusion_reasons.append("medical_like")
@@ -1143,11 +1367,11 @@ def _evaluate_row(
         hard_exclusion_reasons.append("blocklist_domain")
     if cooldown and not include_cooldown_domains:
         hard_exclusion_reasons.append("cooldown_domain")
-    if duplicate_ledger:
-        hard_exclusion_reasons.append("duplicate_ledger")
+    if duplicate_hard_reason:
+        hard_exclusion_reasons.append(duplicate_hard_reason)
     if feedback_hard_exclude:
         hard_exclusion_reasons.append(f"feedback_exclude:{feedback_exclusion or 'prior_outcome'}")
-    if corporate_like and not allow_corporate:
+    if corporate_like and not allow_corporate and not corporate_reviewable:
         hard_exclusion_reasons.append("corporate_like")
     if medical_like:
         hard_exclusion_reasons.append("medical_like")
@@ -1163,10 +1387,16 @@ def _evaluate_row(
         hard_exclusion_reasons.append("no_usable_website")
 
     review_reasons: list[str] = []
+    if duplicate_review_reason:
+        review_reasons.append(duplicate_review_reason)
+    if corporate_reviewable and not hard_exclusion_reasons:
+        review_reasons.append("weak_corporate_like")
     if feedback_action == "deprioritize" and not feedback_hard_exclude:
         review_reasons.append(f"feedback_deprioritize:{feedback_exclusion or 'prior_outcome'}")
     if _reason_key(failure_category) in {"external_form", "iframe_only_form"} and not hard_exclusion_reasons:
         review_reasons.append("feedback_external_form")
+    if _reason_key(failure_category) == "no_form_fields" and not hard_exclusion_reasons:
+        review_reasons.append("feedback_no_form_fields")
     if (external_reservation_contact or _reason_key(failure_category) == "external_reservation") and not hard_exclusion_reasons:
         review_reasons.append("external_reservation_contact")
     if weak_contact and not any(_reason_key(reason) in {"line_or_sns", "portal_listing", "non_web_contact", "no_usable_website"} for reason in hard_exclusion_reasons):
@@ -1263,6 +1493,7 @@ def _evaluate_row(
         "feedback_bonus": str(feedback_bonus),
         "failure_category": failure_category,
         "simple_builder_signal": "1" if simple_builder else "0",
+        "duplicate_note": duplicate_note,
     }
     return CandidateEval(
         row=row,
@@ -1309,6 +1540,7 @@ def build_candidate_evaluations(
     touched_ids, touched_domains = _load_touched_keys(touched_paths)
     ledger_ids.update(touched_ids)
     ledger_domains.update(touched_domains)
+    touch_records_by_id, touch_records_by_domain = _load_touch_records([ledger_path] + touched_paths)
     source_rows = _read_csv(input_path)
     evaluations: list[CandidateEval] = []
     counts: Counter[str] = Counter(input_rows=len(source_rows))
@@ -1324,6 +1556,8 @@ def build_candidate_evaluations(
             feedback_by_domain=feedback_by_domain,
             ledger_ids=ledger_ids,
             ledger_domains=ledger_domains,
+            touch_records_by_id=touch_records_by_id,
+            touch_records_by_domain=touch_records_by_domain,
             blocklist_domains=blocklist_domains,
             cooldown_domains=cooldown_domains,
             include_ledger_domains=include_ledger_domains,
@@ -1653,6 +1887,7 @@ def main() -> int:
         "feedback_bonus",
         "failure_category",
         "simple_builder_signal",
+        "duplicate_note",
     ]
     _write_csv(output_path, fieldnames, selected)
     _write_csv(audit_path, audit_fields, audit_rows)
