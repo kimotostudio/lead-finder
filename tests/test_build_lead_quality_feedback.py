@@ -64,6 +64,15 @@ def test_build_feedback_classifies_prepared_manual_and_blocked(tmp_path: Path) -
                 "website": "https://iframe.example/",
                 "score": "70",
             },
+            {
+                "lead_id": "reservation-1",
+                "domain": "reservation.example",
+                "display_name": "Reservation Studio",
+                "name_confidence": "high",
+                "contact_url": "https://reservation.reservation.example/reserve/",
+                "website": "https://reservation.example/",
+                "score": "70",
+            },
         ],
     )
     _write_csv(
@@ -104,6 +113,16 @@ def test_build_feedback_classifies_prepared_manual_and_blocked(tmp_path: Path) -
                 "message": "iframe_only_form",
                 "evidence": "iframe_form_detected_needs_review:providers=reserva",
             },
+            {
+                "timestamp": "2026-01-01 10:08:00",
+                "salon_id": "reservation-1",
+                "domain": "reservation.reservation.example",
+                "status": "prepared_review_needed",
+                "message": "no_form_fields",
+                "evidence": "no_form_found_but_collected_contact_candidates:iframes=4; providers=reserva",
+                "detected_platform": "reserva",
+                "notes": "no_form_fields; iframes=4; providers=reserva",
+            },
         ],
     )
     _write_csv(ledger_path, [])
@@ -130,3 +149,6 @@ def test_build_feedback_classifies_prepared_manual_and_blocked(tmp_path: Path) -
     assert by_id["iframe-1"]["failure_category"] == "external_form"
     assert by_id["iframe-1"]["recommended_action"] == "manual_review"
     assert by_id["iframe-1"]["manual_review_needed"] == "1"
+    assert by_id["reservation-1"]["failure_category"] == "external_reservation"
+    assert by_id["reservation-1"]["recommended_action"] == "manual_review"
+    assert by_id["reservation-1"]["manual_review_needed"] == "1"

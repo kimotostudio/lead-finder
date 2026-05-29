@@ -84,6 +84,19 @@ CONTACT_PATH_TOKENS = (
     "予約",
     "ご相談",
 )
+EXTERNAL_RESERVATION_TOKENS = (
+    "external_reservation",
+    "reserva",
+    "airrsv",
+    "coubic",
+    "reservestock",
+    "salondenet",
+    "select-type",
+    "tol-app",
+    "reservation.",
+    "/reserve",
+    "予約システム",
+)
 MEDIA_OR_LISTING_TOKENS = (
     "listing_or_media_form",
     "operator_contact_form",
@@ -286,6 +299,11 @@ def contains_any(text: str, tokens: tuple[str, ...]) -> bool:
     return any(token.lower() in lower for token in tokens)
 
 
+def is_external_reservation_no_fill(status: str, reason: str, combined: str) -> bool:
+    text = " ".join([status, reason, combined]).lower()
+    return "no_form_fields" in text and contains_any(text, EXTERNAL_RESERVATION_TOKENS)
+
+
 def classify_failure(
     *,
     status: str,
@@ -295,11 +313,13 @@ def classify_failure(
     domain: str,
     blocklisted: bool,
     cooldown: bool,
+    operational_context: str = "",
 ) -> str:
     combined = " ".join(
         [
             status,
             reason,
+            operational_context,
             pick(feedback, ("lead_quality_issue",)),
             pick(feedback, ("contact_quality_issue",)),
             pick(feedback, ("form_quality_issue",)),
@@ -312,6 +332,8 @@ def classify_failure(
     )
     if blocklisted or cooldown or "blocked_domain" in reason or "bot_protection" in combined:
         return "blocked_domain"
+    if is_external_reservation_no_fill(status, reason, combined):
+        return "external_reservation"
     if (
         "iframe_only_form" in combined
         or "embedded_or_external_form" in combined
@@ -348,6 +370,8 @@ def recommendation_for(status: str, failure_category: str, feedback: dict[str, s
         return "retry_later"
     if failure_category == "external_form":
         return "manual_review"
+    if failure_category == "external_reservation":
+        return "manual_review"
     if failure_category in {"no_form_fields", "weak_contact_url"}:
         return "improve_contact_url"
     if failure_category in {"media_or_listing_page", "corporate_or_portal", "low_confidence_name"}:
@@ -368,6 +392,8 @@ def score_adjustments(status: str, failure_category: str, feedback: dict[str, st
         bonus = max(bonus, 20)
     if failure_category == "weak_contact_url":
         penalty = max(penalty, 25)
+    elif failure_category == "external_reservation":
+        penalty = max(penalty, 45)
     elif failure_category == "external_form":
         penalty = max(penalty, 40)
     elif failure_category == "low_confidence_name":
@@ -403,6 +429,7 @@ def build_feedback(
     blocklist_path: Path,
     cooldowns_path: Path,
     run_date: str,
+    prior_feedback_paths: list[Path] | None = None,
 ) -> list[dict[str, str]]:
     source_rows: dict[tuple[str, str], dict[str, str]] = {}
     for source_path in source_paths:
@@ -416,7 +443,17 @@ def build_feedback(
                 next_row.setdefault("source_csv", str(source_path))
                 source_rows[key] = next_row
 
+    prior_feedback_rows: list[dict[str, str]] = []
+    for prior_path in prior_feedback_paths or []:
+        prior_feedback_rows.extend(read_csv(prior_path))
+    for row in prior_feedback_rows:
+        lead_id = pick(row, ("lead_id", "id", "salon_id"))
+        domain = domain_from_row(row)
+        if lead_id or domain:
+            source_rows.setdefault((lead_id, domain), row)
+
     feedback_rows = load_feedback_rows(results_dir)
+    feedback_rows.extend(prior_feedback_rows)
     feedback_by_id = latest_by_id(feedback_rows, ("lead_id", "id", "salon_id"))
     feedback_by_domain = latest_by_domain(feedback_rows)
     submission_rows: list[dict[str, str]] = []
@@ -447,8 +484,25 @@ def build_feedback(
         submission = submission_by_id.get(lead_id, {})
         review = review_by_id.get(lead_id, {})
         ledger = ledger_by_id.get(lead_id, {})
-        status = pick(feedback, ("final_status",)) or pick(submission, ("status",)) or pick(review, ("status",)) or pick(ledger, ("status",))
-        reason = pick(feedback, ("reason",)) or pick(submission, ("message", "reason")) or pick(review, ("reason",)) or pick(ledger, ("reason",))
+        status = (
+            pick(submission, ("status",))
+            or pick(review, ("status",))
+            or pick(ledger, ("status",))
+            or pick(feedback, ("final_status", "semi_auto_status"))
+        )
+        reason = (
+            pick(submission, ("message", "reason"))
+            or pick(review, ("reason",))
+            or pick(ledger, ("reason",))
+            or pick(feedback, ("reason", "semi_auto_reason"))
+        )
+        operational_context = " ".join(
+            [
+                pick(submission, ("evidence", "notes", "detected_platform", "last_action", "stop_state", "contact_url", "final_step_url", "url")),
+                pick(review, ("evidence", "notes", "detected_platform", "last_action", "stop_state", "contact_url", "final_step_url")),
+                pick(ledger, ("reason", "contact_url", "final_step_url")),
+            ]
+        )
         blocklisted = any(domain == item or domain.endswith(f".{item}") for item in blocklist)
         cooldown = any(domain == item or domain.endswith(f".{item}") for item in cooldowns)
         failure_category = classify_failure(
@@ -459,6 +513,7 @@ def build_feedback(
             domain=domain,
             blocklisted=blocklisted,
             cooldown=cooldown,
+            operational_context=operational_context,
         )
         recommended_action = recommendation_for(status, failure_category, feedback)
         bonus, penalty = score_adjustments(status, failure_category, feedback)
@@ -508,6 +563,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ledger", default=str(DEFAULT_LEDGER), help="Playwright submission ledger CSV.")
     parser.add_argument("--blocklist", default=str(DEFAULT_BLOCKLIST), help="Playwright blocklist_domains.txt.")
     parser.add_argument("--cooldowns", default=str(DEFAULT_COOLDOWNS), help="Playwright domain_cooldowns.json.")
+    parser.add_argument(
+        "--prior-feedback",
+        action="append",
+        default=[],
+        help="Existing local feedback CSV to preserve while refreshing latest artifacts. May be repeated.",
+    )
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Output feedback CSV.")
     return parser.parse_args()
 
@@ -523,6 +584,7 @@ def main() -> int:
         blocklist_path=Path(args.blocklist),
         cooldowns_path=Path(args.cooldowns),
         run_date=run_date,
+        prior_feedback_paths=[Path(item) for item in args.prior_feedback],
     )
     output_path = Path(args.output)
     write_csv(output_path, rows)

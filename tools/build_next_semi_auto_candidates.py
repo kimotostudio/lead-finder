@@ -272,10 +272,22 @@ EXTERNAL_BOOKING_HOSTS = [
     "appt.salondenet.jp",
     "salondenet.jp",
     "reserva.be",
+    "reserva.jp",
     "airrsv.net",
     "coubic.com",
     "tol-app.jp",
     "reservestock.jp",
+    "select-type.com",
+]
+EXTERNAL_RESERVATION_TOKENS = [
+    "reserva",
+    "airrsv",
+    "coubic",
+    "reservestock",
+    "salondenet",
+    "select-type",
+    "tol-app",
+    "reservation.",
 ]
 AUTOMATION_HARD_FAILURE_CATEGORIES = {
     "blocked_domain",
@@ -292,6 +304,7 @@ TIER_B_MANUAL_REVIEW_REASONS = {
     "weak_contact",
     "toc_anchor_contact",
     "external_contact",
+    "external_reservation_contact",
     "website_fallback_contact",
     "contact_unknown",
     "medium_name_confidence",
@@ -538,6 +551,24 @@ def _contact_url_has_good_path(value: str) -> bool:
     parsed = urlparse(str(value or "").strip())
     text = " ".join([parsed.path or "", parsed.query or "", parsed.fragment or ""]).lower()
     return any(token.lower() in text for token in CONTACT_PATH_TOKENS)
+
+
+def _contact_url_has_normal_form_path(value: str) -> bool:
+    parsed = urlparse(str(value or "").strip())
+    text = " ".join([parsed.path or "", parsed.query or "", parsed.fragment or ""]).lower()
+    normal_tokens = ("contact", "inquiry", "form", "otoiawase", "toiawase", "お問い合わせ", "問い合わせ", "ご相談")
+    return any(token.lower() in text for token in normal_tokens)
+
+
+def _is_external_reservation_contact(contact_url: str, contact_host: str, text: str) -> bool:
+    parsed = urlparse(str(contact_url or "").strip())
+    path_text = " ".join([parsed.path or "", parsed.query or "", parsed.fragment or ""]).lower()
+    combined = " ".join([contact_host, path_text, text]).lower()
+    return (
+        _host_matches(contact_host, EXTERNAL_BOOKING_HOSTS)
+        or contact_host.startswith("reservation.")
+        or _contains_any(combined, EXTERNAL_RESERVATION_TOKENS)
+    )
 
 
 def _has_toc_like_anchor(value: str) -> bool:
@@ -950,6 +981,7 @@ def _evaluate_row(
     direct_contact = bool(explicit_contact and contact_url and _same_site(contact_url, domain))
     non_web_contact = bool(explicit_contact and not _is_web_url(explicit_contact))
     good_contact_path = _contact_url_has_good_path(contact_url)
+    normal_form_contact_path = _contact_url_has_normal_form_path(contact_url)
     toc_anchor = _has_toc_like_anchor(contact_url)
     website_ok = _is_web_url(website or contact_url)
     corporate_like = (
@@ -969,6 +1001,11 @@ def _evaluate_row(
     portal_listing = portal_host or (portal_text and (not simple_builder or strict_portal_text))
     unsuitable_content = _contains_any(text, UNSUITABLE_TOKENS)
     external_contact = bool(explicit_contact and contact_host and domain and not _same_site(contact_host, domain))
+    external_reservation_contact = bool(
+        explicit_contact
+        and _is_external_reservation_contact(contact_url, contact_host, text)
+        and not (has_form and normal_form_contact_path)
+    )
     weak_contact = (not website_ok) or line_sns or portal_listing or external_contact
     if toc_anchor or not explicit_contact:
         weak_contact = True
@@ -1018,6 +1055,8 @@ def _evaluate_row(
         issues.append("weak_contact")
     if _reason_key(failure_category) in {"external_form", "iframe_only_form"}:
         issues.append("external_form")
+    if external_reservation_contact or _reason_key(failure_category) == "external_reservation":
+        issues.append("external_reservation")
     if not website_ok:
         issues.append("no_usable_website")
     if non_web_contact:
@@ -1055,6 +1094,8 @@ def _evaluate_row(
         quality_score -= 40
     if portal_listing:
         quality_score -= 35
+    if external_reservation_contact:
+        quality_score -= 30
     if simple_builder:
         quality_score += 12
     if unsuitable_content:
@@ -1126,6 +1167,8 @@ def _evaluate_row(
         review_reasons.append(f"feedback_deprioritize:{feedback_exclusion or 'prior_outcome'}")
     if _reason_key(failure_category) in {"external_form", "iframe_only_form"} and not hard_exclusion_reasons:
         review_reasons.append("feedback_external_form")
+    if (external_reservation_contact or _reason_key(failure_category) == "external_reservation") and not hard_exclusion_reasons:
+        review_reasons.append("external_reservation_contact")
     if weak_contact and not any(_reason_key(reason) in {"line_or_sns", "portal_listing", "non_web_contact", "no_usable_website"} for reason in hard_exclusion_reasons):
         review_reasons.append("weak_contact")
     if toc_anchor:

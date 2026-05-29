@@ -232,6 +232,15 @@ def test_build_candidate_evaluations_assigns_tiers_without_dropping_reviewable_r
                 "original__has_contact_page": "true",
                 "original__has_form": "true",
             },
+            {
+                "lead_id": "reservation-only-1",
+                "display_name": "Reservation Only Studio",
+                "website": "https://reservation-only.example/",
+                "contact_url": "https://reservation.reservation-only.example/reserve/",
+                "score": "90",
+                "name_confidence": "high",
+                "original__has_contact_page": "true",
+            },
         ],
     )
     _write_csv(
@@ -270,8 +279,11 @@ def test_build_candidate_evaluations_assigns_tiers_without_dropping_reviewable_r
     assert "blocklist_domain" in by_id["blocked-1"].hard_exclusion_reasons
     assert by_id["external-form-1"].lead_tier == "B"
     assert "feedback_external_form" in by_id["external-form-1"].review_reasons
+    assert by_id["reservation-only-1"].lead_tier == "B"
+    assert "external_reservation_contact" in by_id["reservation-only-1"].review_reasons
+    assert "external_reservation" in by_id["reservation-only-1"].row["semi_auto_quality_issue"]
     assert counts["tier_a_count"] == 1
-    assert counts["tier_b_count"] == 3
+    assert counts["tier_b_count"] == 4
     assert counts["tier_c_count"] == 1
     assert "lead_tier" in fieldnames
     assert "review_reasons" in fieldnames
