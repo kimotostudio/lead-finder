@@ -277,6 +277,177 @@ def test_build_candidate_evaluations_assigns_tiers_without_dropping_reviewable_r
     assert "review_reasons" in fieldnames
 
 
+def test_simple_builder_sites_are_positive_or_reviewable_not_portal_exclusions(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.csv"
+    feedback_path = tmp_path / "feedback.csv"
+    ledger_path = tmp_path / "ledger.csv"
+
+    _write_csv(
+        input_path,
+        [
+            {
+                "lead_id": "jimdo-good",
+                "display_name": "Jimdo Small Salon",
+                "website": "https://small-salon.jimdofree.com/",
+                "contact_url": "https://small-salon.jimdofree.com/contact/",
+                "score": "80",
+                "name_confidence": "high",
+                "site_type": "jimdofree",
+                "notes": "掲載ページではなく公式サイト",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+            {
+                "lead_id": "wix-weak",
+                "display_name": "Wix Small Studio",
+                "website": "https://owner-studio.wixsite.com/fukuoka",
+                "score": "70",
+                "name_confidence": "high",
+                "site_type": "wixsite",
+            },
+            {
+                "lead_id": "peraichi-good",
+                "display_name": "Peraichi Private Salon",
+                "website": "https://peraichi.com/landing_pages/view/private-salon",
+                "contact_url": "https://peraichi.com/landing_pages/view/private-salon#contact",
+                "score": "80",
+                "name_confidence": "high",
+                "site_type": "peraichi",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+            {
+                "lead_id": "studio-good",
+                "display_name": "Studio Site Yoga",
+                "website": "https://studio.site/fukuoka-yoga",
+                "contact_url": "https://studio.site/fukuoka-yoga/contact",
+                "score": "75",
+                "name_confidence": "high",
+                "site_type": "studio.site",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+            {
+                "lead_id": "ownd-review",
+                "display_name": "Ownd Aroma Salon",
+                "website": "https://aroma-salon.amebaownd.com/",
+                "score": "70",
+                "name_confidence": "medium",
+                "site_type": "amebaownd",
+            },
+            {
+                "lead_id": "stores-review",
+                "display_name": "Stores Lesson Studio",
+                "website": "https://lesson-studio.stores.jp/",
+                "score": "70",
+                "name_confidence": "high",
+                "site_type": "stores",
+            },
+            {
+                "lead_id": "base-review",
+                "display_name": "Base Private Salon",
+                "website": "https://private-salon.base.shop/",
+                "score": "70",
+                "name_confidence": "high",
+                "site_type": "base.shop",
+            },
+            {
+                "lead_id": "goope-good",
+                "display_name": "Goope Therapy Room",
+                "website": "https://therapy-room.goope.jp/",
+                "contact_url": "https://therapy-room.goope.jp/contact",
+                "score": "75",
+                "name_confidence": "high",
+                "site_type": "goope",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+            {
+                "lead_id": "crayon-review",
+                "display_name": "Crayon Small Salon",
+                "website": "https://crayon.e-shops.jp/salon/",
+                "score": "70",
+                "name_confidence": "high",
+                "site_type": "crayon",
+            },
+            {
+                "lead_id": "portal-still-excluded",
+                "display_name": "Portal Ranking",
+                "website": "https://beauty.hotpepper.jp/slnH000/",
+                "contact_url": "https://beauty.hotpepper.jp/slnH000/",
+                "score": "90",
+                "name_confidence": "high",
+            },
+            {
+                "lead_id": "line-still-excluded",
+                "display_name": "Line Only Salon",
+                "website": "https://line-only.example/",
+                "contact_url": "https://lin.ee/abc",
+                "score": "90",
+                "name_confidence": "high",
+            },
+            {
+                "lead_id": "chain-still-excluded",
+                "display_name": "駅前留学NOVA【公式】英会話スクール",
+                "website": "https://www.nova.co.jp/",
+                "contact_url": "https://www.nova.co.jp/contact/",
+                "score": "90",
+                "name_confidence": "high",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+        ],
+    )
+    _write_csv(feedback_path, [])
+    _write_csv(ledger_path, [])
+
+    evaluations, counts, fieldnames = build_candidate_evaluations(
+        input_path=input_path,
+        feedback_path=feedback_path,
+        ledger_path=ledger_path,
+        min_name_confidence="high",
+        min_quality_score=50,
+        limit=20,
+    )
+
+    by_id = {item.row["lead_id"]: item for item in evaluations}
+    assert by_id["jimdo-good"].lead_tier == "A"
+    assert by_id["peraichi-good"].lead_tier == "A"
+    assert by_id["studio-good"].lead_tier == "A"
+    assert by_id["goope-good"].lead_tier == "A"
+    assert by_id["wix-weak"].lead_tier == "B"
+    assert by_id["ownd-review"].lead_tier == "B"
+    assert by_id["stores-review"].lead_tier == "B"
+    assert by_id["base-review"].lead_tier == "B"
+    assert by_id["crayon-review"].lead_tier == "B"
+    assert "weak_contact" in by_id["wix-weak"].review_reasons
+    assert by_id["wix-weak"].hard_exclusion_reasons == []
+    for lead_id in [
+        "jimdo-good",
+        "wix-weak",
+        "peraichi-good",
+        "studio-good",
+        "ownd-review",
+        "stores-review",
+        "base-review",
+        "goope-good",
+        "crayon-review",
+    ]:
+        assert by_id[lead_id].row["simple_builder_signal"] == "1"
+        assert "portal_listing" not in by_id[lead_id].hard_exclusion_reasons
+    assert by_id["portal-still-excluded"].lead_tier == "C"
+    assert "portal_listing" in by_id["portal-still-excluded"].hard_exclusion_reasons
+    assert by_id["line-still-excluded"].lead_tier == "C"
+    assert "line_or_sns" in by_id["line-still-excluded"].hard_exclusion_reasons
+    assert by_id["chain-still-excluded"].lead_tier == "C"
+    assert "corporate_like" in by_id["chain-still-excluded"].hard_exclusion_reasons
+    assert counts["simple_builder_count"] == 9
+    assert counts["simple_builder_tier_a_count"] == 4
+    assert counts["simple_builder_tier_b_count"] == 5
+    assert counts["tier_c_count"] == 3
+    assert "simple_builder_signal" in fieldnames
+
+
 def test_chain_hosts_are_excluded_from_tier_a(tmp_path: Path) -> None:
     input_path = tmp_path / "input.csv"
     feedback_path = tmp_path / "feedback.csv"

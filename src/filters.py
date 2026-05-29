@@ -75,8 +75,9 @@ EXCLUDED_DOMAINS = {
     'byoinnavi.jp',
     'kenkou-job.com',
 
-    # NOTE: Solo-friendly platforms (peraichi, wix, jimdo, fc2, seesaa)
-    # are NOT excluded - they get solo boost instead
+    # NOTE: Solo-friendly website builders (Jimdo/Jindo, Wix, Peraichi,
+    # STUDIO, Ownd, STORES, BASE, Goope, Crayon, etc.) are NOT excluded.
+    # They are often strong small-business signals.
 
     # Job / recruiting sites
     'indeed.com',
@@ -158,8 +159,7 @@ KEYWORD_BLOCKLIST = [
     '医療法人',
     'findglocal',
     'minimodel',
-    # Note: ペライチ and amebaownd removed - peraichi is solo-friendly,
-    # amebaownd is blocked by domain filter
+    # Note: ペライチ and Ameba Ownd are solo-friendly builder signals.
 ]
 
 # ============================================================
@@ -194,6 +194,56 @@ LOCAL_BUSINESS_PATTERN_KEYWORDS = [
     'salon', 'therapy', 'counseling', 'private', 'owner',
 ]
 
+SIMPLE_BUILDER_DOMAINS = {
+    'jimdo.com',
+    'jimdofree.com',
+    'jindo.com',
+    'wixsite.com',
+    'wix.com',
+    'peraichi.com',
+    'studio.site',
+    'amebaownd.com',
+    'ownd.jp',
+    'stores.jp',
+    'thebase.in',
+    'base.shop',
+    'goope.jp',
+    'crayon.e-shops.jp',
+    'crayonsite.info',
+    'crayonsite.net',
+    'crayonsite.com',
+    'shopinfo.jp',
+}
+
+SIMPLE_BUILDER_SOFT_PORTAL_KEYWORDS = {
+    '掲載',
+    '広告',
+    '媒体',
+    'portal',
+    'listing',
+    'directory',
+    'media',
+}
+
+STRICT_PORTAL_KEYWORDS = {
+    'おすすめ',
+    'ランキング',
+    '比較',
+    '一覧',
+    'まとめ',
+    '口コミ',
+    'レビュー',
+    '評価',
+    '人気',
+    '厳選',
+    '徹底比較',
+    '完全ガイド',
+    'ポータル',
+    'hotpepper',
+    'findglocal',
+    'minimodel',
+}
+
 
 def _extract_domain(url: str) -> str:
     """Extract domain from URL, removing www prefix."""
@@ -217,6 +267,15 @@ def _check_keywords(text: str, keywords: list) -> bool:
 def _looks_like_local_business_pattern(url: str, title: str, text: str) -> bool:
     combined = f"{url} {title} {text}"
     return _check_keywords(combined, LOCAL_BUSINESS_PATTERN_KEYWORDS)
+
+
+def _is_simple_builder_domain(domain: str) -> bool:
+    target = str(domain or '').lower().strip()
+    return any(target == item or target.endswith('.' + item) for item in SIMPLE_BUILDER_DOMAINS)
+
+
+def _is_simple_builder_url(url: str) -> bool:
+    return _is_simple_builder_domain(_extract_domain(url))
 
 
 def is_excluded_domain(url: str) -> Tuple[bool, str]:
@@ -328,9 +387,17 @@ def is_corporate_site(url: str, title: str, text: str) -> Tuple[bool, str]:
 def is_aggregator_page(url: str, title: str, text: str) -> Tuple[bool, str]:
     """Check if page is an aggregator/listing page."""
     combined = f"{url} {title}"
+    is_simple_builder = _is_simple_builder_url(url)
 
     # Check for aggregator keywords
     if _check_keywords(combined, AGGREGATOR_KEYWORDS):
+        if (
+            is_simple_builder
+            and _looks_like_local_business_pattern(url, title, text)
+            and not _check_keywords(combined, STRICT_PORTAL_KEYWORDS)
+            and _check_keywords(combined, SIMPLE_BUILDER_SOFT_PORTAL_KEYWORDS)
+        ):
+            return False, ''
         return True, 'aggregator_portal'
 
     # Check for list pattern (e.g., "おすすめ20選")

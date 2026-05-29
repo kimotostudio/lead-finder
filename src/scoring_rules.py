@@ -131,11 +131,18 @@ MEDIA_NOISE_KEYWORDS = {
 SITE_TYPE_BONUS = {
     'peraichi': 15,
     'jimdo': 12,
+    'jindo': 12,
+    'jimdofree': 12,
     'wix': 10,
+    'wixsite': 10,
+    'studio.site': 10,
+    'amebaownd': 10,
     'crayon': 15,
     'crayonsite': 15,
     'goope': 12,
     'ownd': 10,
+    'thebase': 8,
+    'base.shop': 8,
     'base': 8,
     'stores': 8,
     'wordpress': 5,  # Lower - can be anything
@@ -144,11 +151,20 @@ SITE_TYPE_BONUS = {
 # Valid SMB platforms should not get thin-platform penalty.
 VALID_PLATFORM_ALLOWLIST = (
     'wix',
+    'wixsite',
     'jimdo',
+    'jindo',
+    'jimdofree',
     'peraichi',
+    'studio.site',
+    'amebaownd',
+    'ownd',
     'crayon',
     'crayonsite',
     'goope',
+    'thebase',
+    'base.shop',
+    'stores',
 )
 
 THIN_PLATFORM_PENALTY_HITS = ('ameblo', 'fc2', 'linktr.ee', 'note.com')
@@ -639,7 +655,10 @@ def compute_weakness(leads: List[Dict]) -> List[Dict]:
 SOLO_PLATFORM_DOMAINS = {
     'peraichi.com': 40,
     'jimdofree.com': 35,
+    'jindo.com': 35,
     'wixsite.com': 30,
+    'wix.com': 30,
+    'studio.site': 30,
     'strikingly.com': 30,
     'weebly.com': 25,
     'wordpress.com': 20,
@@ -649,10 +668,14 @@ SOLO_PLATFORM_DOMAINS = {
     'amebaownd.com': 30,
     'jimdo.com': 35,
     'shopinfo.jp': 30,
+    'crayon.e-shops.jp': 35,
+    'crayonsite.info': 35,
+    'crayonsite.com': 35,
     'crayonsite.net': 35,
     'goope.jp': 30,
     'ownd.jp': 25,
     'stores.jp': 20,
+    'thebase.in': 20,
     'base.shop': 20,
 }
 

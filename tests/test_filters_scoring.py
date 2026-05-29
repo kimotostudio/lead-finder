@@ -51,6 +51,43 @@ def test_counseling_kept():
     assert reason == ''
 
 
+@pytest.mark.parametrize(
+    "url,title",
+    [
+        ("https://small-salon.jimdofree.com/", "福岡の小さな個人サロン 掲載ページ"),
+        ("https://owner-salon.jimdo.com/", "福岡 プライベートサロン"),
+        ("https://owner-studio.wixsite.com/fukuoka", "福岡 ヨガスタジオ"),
+        ("https://peraichi.com/landing_pages/view/fukuoka-salon", "福岡 ペライチ 個人サロン"),
+        ("https://studio.site/fukuoka-studio", "福岡 小規模スタジオ"),
+        ("https://owner-salon.amebaownd.com/", "福岡 Ameba Ownd サロン"),
+        ("https://small-shop.stores.jp/", "福岡 予約制サロン"),
+        ("https://owner-salon.base.shop/", "福岡 プライベートサロン"),
+        ("https://small-salon.goope.jp/", "福岡 小さなサロン"),
+        ("https://crayon.e-shops.jp/salon/", "福岡 個人サロン"),
+    ],
+)
+def test_simple_builder_small_business_pages_not_hard_excluded(url, title):
+    lead = make_lead(
+        url=url,
+        title=title,
+        visible_text="完全予約制の小さなサロンです。お問い合わせフォームからご相談ください。",
+    )
+    is_filtered, reason = get_filter_reason(lead)
+    assert not is_filtered
+    assert reason == ''
+
+
+def test_simple_builder_real_portal_language_still_excluded():
+    lead = make_lead(
+        url='https://studio.site/fukuoka-ranking',
+        title='福岡サロンおすすめランキング20選',
+        visible_text='比較と口コミをまとめた情報サイトです。',
+    )
+    is_filtered, reason = get_filter_reason(lead)
+    assert is_filtered
+    assert reason in {'aggregator_portal', 'aggregator_list'}
+
+
 def test_boost_for_reservation_only():
     # A counseling lead with 完全予約制 should get a positive boost
     lead = make_lead(url='https://example.com', title='カウンセリングルーム', visible_text='完全予約制、個人セッション', score=20, site_type='jimdo')
@@ -132,3 +169,30 @@ def test_english_corporate_terms_excluded():
     is_filtered, reason = get_filter_reason(lead)
     assert is_filtered
     assert reason == 'corporate_franchise'
+
+
+@pytest.mark.parametrize(
+    "url,site_type",
+    [
+        ("https://small-salon.jimdofree.com/", "jimdofree"),
+        ("https://owner-salon.jindo.com/", "jindo"),
+        ("https://owner-studio.wixsite.com/fukuoka", "wixsite"),
+        ("https://studio.site/fukuoka-studio", "studio.site"),
+        ("https://owner-salon.amebaownd.com/", "amebaownd"),
+        ("https://small-shop.stores.jp/", "stores"),
+        ("https://owner-salon.base.shop/", "base.shop"),
+        ("https://small-salon.goope.jp/", "goope"),
+        ("https://crayon.e-shops.jp/salon/", "crayon"),
+    ],
+)
+def test_simple_builder_platforms_get_positive_scoring_signal(url, site_type):
+    lead = make_lead(
+        url=url,
+        title="福岡 個人サロン",
+        visible_text="完全予約制、お問い合わせフォームあり",
+        score=30,
+        site_type=site_type,
+    )
+    boost, reasons = boost_score(lead)
+    assert boost > 0
+    assert not any(reason.startswith("penalize:platform_") for reason in reasons)

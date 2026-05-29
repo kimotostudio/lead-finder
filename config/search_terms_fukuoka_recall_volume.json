@@ -38,9 +38,15 @@
     "福岡市 今泉 サロン jimdo お問い合わせ -ホットペッパー -求人 -ランキング",
     "福岡市 中央区 サロン ペライチ お問い合わせ -ホットペッパー -求人 -ランキング",
     "福岡市 博多区 教室 jimdo お問い合わせ -求人 -ランキング -ポータル",
-    "福岡市 個人サロン wixsite お問い合わせ -ホットペッパー -Instagram -LINE"
+    "福岡市 個人サロン wixsite お問い合わせ -ホットペッパー -Instagram -LINE",
+    "福岡市 個人サロン studio.site お問い合わせ -ホットペッパー -求人 -ランキング",
+    "福岡市 小さなサロン amebaownd お問い合わせ -ホットペッパー -求人 -ランキング",
+    "福岡市 プライベートサロン goope お問い合わせ -ホットペッパー -求人 -ランキング",
+    "福岡市 個人サロン stores.jp お問い合わせ -ホットペッパー -求人 -ランキング",
+    "福岡市 個人サロン base.shop お問い合わせ -ホットペッパー -求人 -ランキング",
+    "福岡市 サロン crayon お問い合わせ -ホットペッパー -求人 -ランキング"
   ],
-  "max_queries_default": 24,
+  "max_queries_default": 30,
   "max_results_per_query_default": 5,
   "parallel_workers_default": 2,
   "sleep_sec_between_queries_default": 1.3,

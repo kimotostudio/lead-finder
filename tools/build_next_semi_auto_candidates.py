@@ -71,6 +71,7 @@ BASE_FIELDS = [
     "source_csv",
     "source_row",
     "template",
+    "site_type",
     "image",
     "therapist_image",
     "url(旧)",
@@ -100,6 +101,7 @@ QUALITY_FIELDS = [
     "semi_auto_feedback_penalty",
     "semi_auto_feedback_bonus",
     "failure_category",
+    "simple_builder_signal",
 ]
 
 LEAD_ID_FIELDS = ("lead_id", "id", "ID", "管理番号")
@@ -227,6 +229,45 @@ PORTAL_HOSTS = [
     "city.fukuoka.lg.jp",
     "lg.jp",
 ]
+SIMPLE_BUILDER_HOSTS = [
+    "jimdo.com",
+    "jimdofree.com",
+    "jindo.com",
+    "wixsite.com",
+    "wix.com",
+    "peraichi.com",
+    "studio.site",
+    "amebaownd.com",
+    "ownd.jp",
+    "stores.jp",
+    "thebase.in",
+    "base.shop",
+    "goope.jp",
+    "crayon.e-shops.jp",
+    "crayonsite.info",
+    "crayonsite.net",
+    "crayonsite.com",
+    "shopinfo.jp",
+]
+SIMPLE_BUILDER_TOKENS = [
+    "jimdo",
+    "jindo",
+    "jimdofree",
+    "wixsite",
+    "wix.com",
+    "peraichi",
+    "ペライチ",
+    "studio.site",
+    "amebaownd",
+    "ameba ownd",
+    "ownd.jp",
+    "stores.jp",
+    "thebase.in",
+    "base.shop",
+    "goope",
+    "crayon.e-shops",
+    "crayonsite",
+]
 EXTERNAL_BOOKING_HOSTS = [
     "appt.salondenet.jp",
     "salondenet.jp",
@@ -271,6 +312,26 @@ PORTAL_TOKENS = [
     "directory",
     "media",
     "advertis",
+    "hotpepper",
+    "findglocal",
+    "minimodel",
+    "探している人",
+    "発見するサイト",
+    "大学",
+    "university",
+]
+STRICT_PORTAL_TOKENS = [
+    "おすすめ",
+    "ランキング",
+    "比較",
+    "一覧",
+    "まとめ",
+    "口コミ",
+    "レビュー",
+    "人気",
+    "厳選",
+    "徹底比較",
+    "完全ガイド",
     "hotpepper",
     "findglocal",
     "minimodel",
@@ -433,6 +494,28 @@ def _domain_matches(domain: str, known_domains: Iterable[str]) -> bool:
 def _contains_any(text: str, tokens: Iterable[str]) -> bool:
     haystack = str(text or "").lower()
     return any(token.lower() in haystack for token in tokens)
+
+
+def _is_simple_builder_site(row: dict[str, str], domain: str, website: str, contact_url: str) -> bool:
+    hosts = [domain, _host(website), _host(contact_url)]
+    if any(_host_matches(host, SIMPLE_BUILDER_HOSTS) for host in hosts if host):
+        return True
+    platform_text = " ".join(
+        str(row.get(key, ""))
+        for key in (
+            "site_type",
+            "original__site_type",
+            "original__サイトタイプ",
+            "notes",
+            "reason",
+            "original__reason",
+            "original__個人度理由",
+            "original__営業ラベル理由",
+            "website",
+            "contact_url",
+        )
+    )
+    return _contains_any(platform_text, SIMPLE_BUILDER_TOKENS)
 
 
 def _truthy(value: str) -> bool:
@@ -791,6 +874,7 @@ def _normalize_row(row: dict[str, str], source_csv: Path, source_row: int) -> di
         "source_csv": str(source_csv),
         "source_row": str(source_row),
         "template": _pick(row, ("template",)),
+        "site_type": _pick(row, ("site_type", "サイトタイプ", "original__site_type")),
         "image": _pick(row, ("image",)),
         "therapist_image": _pick(row, ("therapist_image",)),
         "url(旧)": website,
@@ -878,7 +962,11 @@ def _evaluate_row(
     )
     medical_like = _contains_any(text, MEDICAL_TOKENS)
     line_sns = _host_matches(domain, LINE_SNS_HOSTS) or _host_matches(contact_host, LINE_SNS_HOSTS)
-    portal_listing = _host_matches(domain, PORTAL_HOSTS) or _host_matches(contact_host, PORTAL_HOSTS) or _contains_any(text, PORTAL_TOKENS)
+    simple_builder = _is_simple_builder_site(row, domain, website, contact_url)
+    portal_host = _host_matches(domain, PORTAL_HOSTS) or _host_matches(contact_host, PORTAL_HOSTS)
+    portal_text = _contains_any(text, PORTAL_TOKENS)
+    strict_portal_text = _contains_any(text, STRICT_PORTAL_TOKENS)
+    portal_listing = portal_host or (portal_text and (not simple_builder or strict_portal_text))
     unsuitable_content = _contains_any(text, UNSUITABLE_TOKENS)
     external_contact = bool(explicit_contact and contact_host and domain and not _same_site(contact_host, domain))
     weak_contact = (not website_ok) or line_sns or portal_listing or external_contact
@@ -922,6 +1010,8 @@ def _evaluate_row(
         issues.append("line_or_sns")
     if portal_listing:
         issues.append("portal_listing")
+    if simple_builder:
+        issues.append("simple_builder_site")
     if unsuitable_content:
         issues.append("unsuitable_content")
     if weak_contact:
@@ -965,6 +1055,8 @@ def _evaluate_row(
         quality_score -= 40
     if portal_listing:
         quality_score -= 35
+    if simple_builder:
+        quality_score += 12
     if unsuitable_content:
         quality_score -= 100
     if weak_contact:
@@ -1098,6 +1190,7 @@ def _evaluate_row(
     row["semi_auto_feedback_penalty"] = str(feedback_penalty)
     row["semi_auto_feedback_bonus"] = str(feedback_bonus)
     row["failure_category"] = failure_category
+    row["simple_builder_signal"] = "1" if simple_builder else "0"
     row["recommended_action"] = recommended_action
     if semi_auto_status == "prepared_full" and lead_tier == "A":
         row["recommended_action"] = "prepare_similar"
@@ -1126,6 +1219,7 @@ def _evaluate_row(
         "feedback_penalty": str(feedback_penalty),
         "feedback_bonus": str(feedback_bonus),
         "failure_category": failure_category,
+        "simple_builder_signal": "1" if simple_builder else "0",
     }
     return CandidateEval(
         row=row,
@@ -1201,6 +1295,9 @@ def build_candidate_evaluations(
             required_location_tokens=required_location_tokens,
         )
         evaluations.append(evaluated)
+        if evaluated.row.get("simple_builder_signal") == "1":
+            counts["simple_builder_count"] += 1
+            counts[f"simple_builder_tier_{evaluated.lead_tier.lower()}_count"] += 1
         for reason in evaluated.exclusion_reasons:
             counts[f"excluded_{_reason_key(reason)}"] += 1
         counts[f"tier_{evaluated.lead_tier.lower()}_count"] += 1
@@ -1341,7 +1438,10 @@ def _write_tiered_report(
     hard_reason_counts: Counter[str] = Counter()
     review_reason_counts: Counter[str] = Counter()
     candidate_domains: Counter[str] = Counter()
+    simple_builder_tiers: Counter[str] = Counter()
     for item in evaluations:
+        if item.row.get("simple_builder_signal") == "1":
+            simple_builder_tiers[item.lead_tier] += 1
         if item.lead_tier in {"A", "B"} and item.row.get("domain"):
             candidate_domains[item.row["domain"]] += 1
         for reason in item.hard_exclusion_reasons:
@@ -1369,6 +1469,10 @@ def _write_tiered_report(
         f"- Tier C excluded/low-priority: {tier_counts.get('C', 0)}",
         f"- candidates remaining for demo generation: {tier_counts.get('A', 0)}",
         f"- candidates needing manual review: {tier_counts.get('B', 0)}",
+        f"- simple-builder candidates: {sum(simple_builder_tiers.values())}",
+        f"- simple-builder Tier A: {simple_builder_tiers.get('A', 0)}",
+        f"- simple-builder Tier B: {simple_builder_tiers.get('B', 0)}",
+        f"- simple-builder Tier C: {simple_builder_tiers.get('C', 0)}",
         "",
         "## Top Exclusion Reasons",
         "",
@@ -1505,6 +1609,7 @@ def main() -> int:
         "feedback_penalty",
         "feedback_bonus",
         "failure_category",
+        "simple_builder_signal",
     ]
     _write_csv(output_path, fieldnames, selected)
     _write_csv(audit_path, audit_fields, audit_rows)

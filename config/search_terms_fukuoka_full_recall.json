@@ -95,9 +95,16 @@
     "福岡県 小さなサロン お問い合わせ 公式 -ホットペッパー -求人 -ランキング -ポータル -Instagram",
     "site:jimdofree.com 福岡県 個人サロン お問い合わせ -求人 -ランキング -クリニック",
     "site:wixsite.com 福岡県 プライベートサロン お問い合わせ -求人 -ランキング -クリニック",
-    "site:peraichi.com 福岡県 サロン お問い合わせ -求人 -ランキング -クリニック"
+    "site:peraichi.com 福岡県 サロン お問い合わせ -求人 -ランキング -クリニック",
+    "site:studio.site 福岡県 小規模スタジオ お問い合わせ -求人 -ランキング -クリニック",
+    "site:amebaownd.com 福岡県 個人サロン お問い合わせ -求人 -ランキング -クリニック",
+    "site:goope.jp 福岡県 プライベートサロン お問い合わせ -求人 -ランキング -クリニック",
+    "site:stores.jp 福岡県 個人サロン お問い合わせ -求人 -ランキング -クリニック",
+    "site:thebase.in 福岡県 個人サロン お問い合わせ -求人 -ランキング -クリニック",
+    "site:base.shop 福岡県 個人サロン お問い合わせ -求人 -ランキング -クリニック",
+    "site:crayon.e-shops.jp 福岡県 サロン お問い合わせ -求人 -ランキング -クリニック"
   ],
-  "max_queries_default": 72,
+  "max_queries_default": 80,
   "max_results_per_query_default": 5,
   "parallel_workers_default": 2,
   "sleep_sec_between_queries_default": 1.3,

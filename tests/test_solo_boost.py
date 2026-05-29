@@ -151,9 +151,16 @@ class TestSoloPlatformDetection:
     @pytest.mark.parametrize("domain,expected_boost", [
         ("peraichi.com", 40),
         ("jimdofree.com", 35),
+        ("jimdo.com", 35),
         ("wixsite.com", 30),
+        ("studio.site", 30),
+        ("amebaownd.com", 30),
+        ("crayon.e-shops.jp", 35),
         ("crayonsite.net", 35),
         ("goope.jp", 30),
+        ("stores.jp", 20),
+        ("thebase.in", 20),
+        ("base.shop", 20),
     ])
     def test_platform_domains(self, domain, expected_boost):
         """Various solo-friendly platforms should get appropriate boosts."""

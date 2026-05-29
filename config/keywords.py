@@ -42,16 +42,20 @@ CITY_KEYWORDS = [
 # Free site builder platforms
 FREE_PLATFORMS = {
     'peraichi': ['peraichi.com'],
-    'crayon': ['crayonsite.info', 'crayonsite.net'],
-    'jimdo': ['jimdo', 'jimdofree'],
+    'crayon': ['crayon.e-shops.jp', 'crayonsite.info', 'crayonsite.net', 'crayonsite.com'],
+    'jimdo': ['jimdo', 'jindo', 'jimdofree'],
     'wix': ['wixsite.com', 'wix.com'],
     'ameblo': ['ameblo.jp', 'ameba.jp'],
+    'amebaownd': ['amebaownd.com', 'ownd.jp'],
     'fc2': ['fc2.com'],
     'note': ['note.com'],
     'studio.site': ['studio.site'],
     'lit.link': ['lit.link'],
     'linktree': ['linktr.ee'],
     'thebase': ['thebase.in'],
+    'base.shop': ['base.shop'],
+    'stores': ['stores.jp'],
+    'goope': ['goope.jp'],
     'wordpress': ['wp-content', 'wordpress'],
 }
 
@@ -131,7 +135,8 @@ BUSINESS_NAME_PATTERNS = [
 # Prioritized domains (small business builders)
 PRIORITIZED_PATTERNS = [
     'peraichi.com', 'studio.site', 'wixsite.com', 'jimdofree.com',
-    'ameblo.jp', 'lit.link', 'linktr.ee', 'thebase.in',
+    'jimdo.com', 'amebaownd.com', 'goope.jp', 'stores.jp',
+    'base.shop', 'thebase.in', 'crayon.e-shops.jp', 'crayonsite.info',
 ]
 
 # Query variations to generate
@@ -147,8 +152,12 @@ QUERY_SUFFIXES = [
 # Site type suffixes for targeted search
 SITE_TYPE_SUFFIXES = [
     'peraichi',
-    'ameblo',
     'jimdo',
+    'wix',
     'studio.site',
-    'lit.link',
+    'amebaownd',
+    'stores',
+    'base',
+    'goope',
+    'crayon',
 ]
