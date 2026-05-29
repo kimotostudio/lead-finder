@@ -73,6 +73,15 @@ def test_build_feedback_classifies_prepared_manual_and_blocked(tmp_path: Path) -
                 "website": "https://reservation.example/",
                 "score": "70",
             },
+            {
+                "lead_id": "google-form-1",
+                "domain": "google-form.example",
+                "display_name": "External Intake Studio",
+                "name_confidence": "high",
+                "contact_url": "https://google-form.example/contact.html",
+                "website": "https://google-form.example/",
+                "score": "70",
+            },
         ],
     )
     _write_csv(
@@ -85,6 +94,7 @@ def test_build_feedback_classifies_prepared_manual_and_blocked(tmp_path: Path) -
                 "reason": "prepared",
                 "contact_quality_issue": "contact_ok",
                 "form_quality_issue": "form_ok",
+                "recommended_action": "keep",
             },
             {
                 "lead_id": "toc-1",
@@ -123,6 +133,18 @@ def test_build_feedback_classifies_prepared_manual_and_blocked(tmp_path: Path) -
                 "detected_platform": "reserva",
                 "notes": "no_form_fields; iframes=4; providers=reserva",
             },
+            {
+                "timestamp": "2026-01-01 10:12:00",
+                "salon_id": "google-form-1",
+                "salon_name": "External Intake Studio",
+                "contact_url": "https://docs.google.com/forms/d/e/example/viewform?usp=send_form",
+                "final_step_url": "https://docs.google.com/forms/d/e/example/viewform",
+                "status": "prepared_review_needed",
+                "message": "no_submit_button",
+                "detected_platform": "google_forms",
+                "notes": "no_submit_button",
+                "stop_state": "form_filled",
+            },
         ],
     )
     _write_csv(ledger_path, [])
@@ -152,3 +174,7 @@ def test_build_feedback_classifies_prepared_manual_and_blocked(tmp_path: Path) -
     assert by_id["reservation-1"]["failure_category"] == "external_reservation"
     assert by_id["reservation-1"]["recommended_action"] == "manual_review"
     assert by_id["reservation-1"]["manual_review_needed"] == "1"
+    assert by_id["google-form-1"]["failure_category"] == "external_form"
+    assert by_id["google-form-1"]["recommended_action"] == "manual_review"
+    assert by_id["google-form-1"]["manual_review_needed"] == "1"
+    assert by_id["google-form-1"]["contact_url"].startswith("https://docs.google.com/forms/")

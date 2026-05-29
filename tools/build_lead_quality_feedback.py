@@ -97,6 +97,17 @@ EXTERNAL_RESERVATION_TOKENS = (
     "/reserve",
     "予約システム",
 )
+EXTERNAL_FORM_TOKENS = (
+    "external_form",
+    "embedded_or_external_form",
+    "iframe_only_form",
+    "manual_review_embedded_iframe_form",
+    "google_forms",
+    "google form",
+    "googleフォーム",
+    "docs.google.com/forms",
+    "forms.gle",
+)
 MEDIA_OR_LISTING_TOKENS = (
     "listing_or_media_form",
     "operator_contact_form",
@@ -154,6 +165,15 @@ def pick(row: dict[str, str], keys: tuple[str, ...]) -> str:
         if alt is not None and str(alt).strip():
             return str(alt).strip()
     return ""
+
+
+def collect(row: dict[str, str], keys: tuple[str, ...]) -> str:
+    parts: list[str] = []
+    for key in keys:
+        value = row.get(key)
+        if value is not None and str(value).strip():
+            parts.append(str(value).strip())
+    return " ".join(parts)
 
 
 def clean_domain(value: str) -> str:
@@ -304,6 +324,16 @@ def is_external_reservation_no_fill(status: str, reason: str, combined: str) -> 
     return "no_form_fields" in text and contains_any(text, EXTERNAL_RESERVATION_TOKENS)
 
 
+def is_external_form_manual_review(status: str, reason: str, combined: str) -> bool:
+    text = " ".join([status, reason, combined]).lower()
+    review_state = (
+        status in {"prepared_review_needed", "prepared_partial", "prepared_external"}
+        or "manual_review" in text
+        or "no_submit_button" in text
+    )
+    return review_state and contains_any(text, EXTERNAL_FORM_TOKENS)
+
+
 def classify_failure(
     *,
     status: str,
@@ -334,6 +364,8 @@ def classify_failure(
         return "blocked_domain"
     if is_external_reservation_no_fill(status, reason, combined):
         return "external_reservation"
+    if is_external_form_manual_review(status, reason, combined):
+        return "external_form"
     if (
         "iframe_only_form" in combined
         or "embedded_or_external_form" in combined
@@ -361,9 +393,6 @@ def classify_failure(
 
 
 def recommendation_for(status: str, failure_category: str, feedback: dict[str, str]) -> str:
-    explicit = pick(feedback, ("recommended_action", "lead_finder_recommended_action"))
-    if explicit in {"block", "deprioritize", "manual_review", "retry_later", "improve_contact_url", "keep", "prioritize_similar"}:
-        return explicit
     if failure_category == "blocked_domain":
         return "block"
     if failure_category == "timeout_contact":
@@ -380,6 +409,9 @@ def recommendation_for(status: str, failure_category: str, feedback: dict[str, s
         return "prioritize_similar"
     if status.startswith("prepared_review") or status == "prepared_partial":
         return "manual_review"
+    explicit = pick(feedback, ("recommended_action", "lead_finder_recommended_action"))
+    if explicit in {"block", "deprioritize", "manual_review", "retry_later", "improve_contact_url", "keep", "prioritize_similar"}:
+        return explicit
     return "keep"
 
 
@@ -498,9 +530,9 @@ def build_feedback(
         )
         operational_context = " ".join(
             [
-                pick(submission, ("evidence", "notes", "detected_platform", "last_action", "stop_state", "contact_url", "final_step_url", "url")),
-                pick(review, ("evidence", "notes", "detected_platform", "last_action", "stop_state", "contact_url", "final_step_url")),
-                pick(ledger, ("reason", "contact_url", "final_step_url")),
+                collect(submission, ("evidence", "notes", "detected_platform", "last_action", "stop_state", "contact_url", "final_step_url", "url")),
+                collect(review, ("evidence", "notes", "detected_platform", "last_action", "stop_state", "contact_url", "final_step_url")),
+                collect(ledger, ("reason", "contact_url", "final_step_url")),
             ]
         )
         blocklisted = any(domain == item or domain.endswith(f".{item}") for item in blocklist)
@@ -522,11 +554,24 @@ def build_feedback(
         prepared_success = "1" if status == "prepared_full" else "0"
         manual_review = "1" if status in {"prepared_review_needed", "prepared_partial", "prepared_external"} else "0"
         blocked_or_skipped = "1" if status.startswith("skipped") or failure_category == "blocked_domain" else "0"
+        latest_display_name = (
+            pick(submission, ("salon_name", "display_name"))
+            or pick(review, ("salon_name", "display_name"))
+            or pick(source, DISPLAY_FIELDS)
+            or pick(feedback, ("display_name",))
+        )
+        latest_contact_url = (
+            pick(submission, ("contact_url",))
+            or pick(review, ("contact_url",))
+            or pick(ledger, ("contact_url",))
+            or pick(feedback, ("contact_url",))
+            or pick(source, CONTACT_FIELDS)
+        )
         output.append(
             {
                 "lead_id": lead_id,
                 "domain": domain,
-                "display_name": pick(source, DISPLAY_FIELDS) or pick(feedback, ("display_name",)),
+                "display_name": latest_display_name,
                 "name_confidence": pick(source, ("name_confidence",)),
                 "name_source": pick(source, ("name_source",)),
                 "name_warning": pick(source, ("name_warning",)),
@@ -535,7 +580,7 @@ def build_feedback(
                 "category": pick(source, CATEGORY_FIELDS),
                 "original_score": pick(source, SCORE_FIELDS),
                 "solo_score": pick(source, SOLO_FIELDS),
-                "contact_url": pick(feedback, ("contact_url",)) or pick(source, CONTACT_FIELDS),
+                "contact_url": latest_contact_url,
                 "website": pick(source, WEBSITE_FIELDS),
                 "demo_url": pick(source, DEMO_FIELDS),
                 "semi_auto_status": status,
