@@ -19,6 +19,7 @@ Thumbs.db
 *.log
 ops_daily.log
 ops_runs/
+reports/codex_reports/
 
 # Generated lead/output artifacts
 web_app/output/
@@ -27,4 +28,3 @@ web_app/output/
 *.xlsx
 *.xls
 *.tmp
-

@@ -46,4 +46,6 @@ lead-finder -> demo-generator -> human review -> playwright-automation
 - Preserve original source columns when normalizing.
 - Prefer stable domain-derived IDs where possible.
 - Ask before scraping new external targets or running network searches.
-- End with a detailed `Report for ChatGPT` following `/home/kimoto/projects/prompts/final_report_template.md`, plus Discord notification when possible.
+- Save the full detailed `Report for ChatGPT` under `reports/codex_reports/YYYYMMDD_HHMM_task_name.md`.
+- Print only the report path plus a short summary in the terminal.
+- Send important task reports to Discord with `~/bin/notify-discord-report`; never expose the webhook URL.
