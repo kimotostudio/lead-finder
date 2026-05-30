@@ -46,4 +46,4 @@ lead-finder -> demo-generator -> human review -> playwright-automation
 - Preserve original source columns when normalizing.
 - Prefer stable domain-derived IDs where possible.
 - Ask before scraping new external targets or running network searches.
-- End with a short report and Discord notification when possible.
+- End with a detailed `Report for ChatGPT` following `/home/kimoto/projects/prompts/final_report_template.md`, plus Discord notification when possible.
