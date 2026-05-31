@@ -7,7 +7,7 @@
 Pipeline position:
 
 ```text
-lead-finder -> demo-generator -> human review -> playwright-automation
+lead-finder -> demo-generator -> public demo URL -> Playwright preflight -> SEMI_AUTO
 ```
 
 ## Current State
@@ -47,5 +47,6 @@ lead-finder -> demo-generator -> human review -> playwright-automation
 - Prefer stable domain-derived IDs where possible.
 - Ask before scraping new external targets or running network searches.
 - Save the full detailed `Report for ChatGPT` under `reports/codex_reports/YYYYMMDD_HHMM_task_name.md`.
+- After saving the report, run `/home/kimoto/projects/scripts/watchdog_check.py --report <REPORT_PATH> --repo lead-finder --notify`.
 - Print only the report path plus a short summary in the terminal.
-- Send important task reports to Discord as compact summaries with `~/bin/notify-discord-report`; use `--full` only when explicitly requested, and never expose the webhook URL.
+- Notify Discord only if the watchdog returns WARNING/CRITICAL, a human decision is needed, or notification is explicitly requested; use `--full` only when explicitly requested, and never expose the webhook URL.
