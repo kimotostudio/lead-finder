@@ -513,6 +513,95 @@ def test_chain_hosts_are_excluded_from_tier_a(tmp_path: Path) -> None:
     assert counts["tier_c_count"] == 2
 
 
+def test_generated_pool_quality_noise_is_excluded(tmp_path: Path) -> None:
+    input_path = tmp_path / "input.csv"
+    feedback_path = tmp_path / "feedback.csv"
+    ledger_path = tmp_path / "ledger.csv"
+
+    _write_csv(
+        input_path,
+        [
+            {
+                "lead_id": "clean-salon",
+                "display_name": "Private Aroma Salon",
+                "website": "https://clean-salon.example/",
+                "contact_url": "https://clean-salon.example/contact/",
+                "score": "90",
+                "name_confidence": "high",
+                "original__title": "福岡市薬院のプライベートアロマサロン",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+            {
+                "lead_id": "blog-column",
+                "display_name": "English Search",
+                "website": "https://english-search.jp/columns/471",
+                "score": "80",
+                "name_confidence": "medium",
+                "original__title": "英会話教室・英語塾・英語の勉強方法を紹介",
+            },
+            {
+                "lead_id": "music-school",
+                "display_name": "京都・大阪のピアノ教室",
+                "website": "https://music-school.example/",
+                "contact_url": "https://music-school.example/contact/",
+                "score": "90",
+                "name_confidence": "high",
+                "original__title": "京都・大阪のピアノ教室・キーボードスクール",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+            {
+                "lead_id": "weak-name",
+                "display_name": "お悩みに特化したサロン",
+                "website": "https://weak-name.example/",
+                "contact_url": "https://weak-name.example/contact/",
+                "score": "90",
+                "name_confidence": "high",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+            {
+                "lead_id": "non-target",
+                "display_name": "Denny's",
+                "website": "https://www.dennys.jp/menu/light-morning/",
+                "contact_url": "https://www.dennys.jp/app/information/",
+                "score": "90",
+                "name_confidence": "high",
+                "original__has_contact_page": "true",
+                "original__has_form": "true",
+            },
+        ],
+    )
+    _write_csv(feedback_path, [])
+    _write_csv(ledger_path, [])
+
+    evaluations, counts, _fieldnames = build_candidate_evaluations(
+        input_path=input_path,
+        feedback_path=feedback_path,
+        ledger_path=ledger_path,
+        min_name_confidence="high",
+        min_quality_score=70,
+        limit=20,
+    )
+
+    by_id = {item.row["lead_id"]: item for item in evaluations}
+    assert by_id["clean-salon"].lead_tier == "A"
+    assert by_id["blog-column"].lead_tier == "C"
+    assert "blog_like" in by_id["blog-column"].hard_exclusion_reasons
+    assert "school_tutoring_music" in by_id["blog-column"].hard_exclusion_reasons
+    assert by_id["music-school"].lead_tier == "C"
+    assert "school_tutoring_music" in by_id["music-school"].hard_exclusion_reasons
+    assert "out_of_area" in by_id["music-school"].hard_exclusion_reasons
+    assert by_id["weak-name"].selected is False
+    assert "weak_display_name" in by_id["weak-name"].exclusion_reasons
+    assert by_id["non-target"].lead_tier == "C"
+    assert "non_target_site" in by_id["non-target"].hard_exclusion_reasons
+    assert counts["tier_a_count"] == 1
+    assert counts["tier_c_count"] == 3
+    assert counts["excluded_weak_display_name"] == 2
+
+
 def test_prepared_duplicates_are_reviewable_unless_same_day_or_blocked(tmp_path: Path) -> None:
     input_path = tmp_path / "input.csv"
     feedback_path = tmp_path / "feedback.csv"

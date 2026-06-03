@@ -181,6 +181,7 @@ CORPORATE_CHAIN_HOSTS = [
     "shane.co.jp",
     "pilates-k.jp",
     "m-pilates.com",
+    "hotyoga-loive.com",
     "queensway-group.jp",
     "urbanclassic.jp",
 ]
@@ -274,7 +275,108 @@ PORTAL_HOSTS = [
     "tayori.com",
     "city.fukuoka.lg.jp",
     "lg.jp",
+    "clinic.jiko24.jp",
+    "english-search.jp",
+    "jp.amazingtalker.com",
+    "form.run",
+    "hoteru.info",
 ]
+BLOG_LIKE_HOSTS = [
+    "english-search.jp",
+    "everydayuk.xyz",
+    "form.run",
+    "hoteru.info",
+    "rarejob.com",
+    "zenn.dev",
+]
+NON_TARGET_HOSTS = [
+    "and-honey.com",
+    "vicrea.jp",
+    "dennys.jp",
+    "okura-club-hotels.com",
+    "the358.com",
+    "tokyomotion.net",
+    "zenn.dev",
+]
+BLOG_LIKE_PATH_TOKENS = [
+    "/blog/",
+    "/blogs/",
+    "/column",
+    "/columns/",
+    "/article",
+    "/articles/",
+    "/media/",
+    "/home/blog/",
+]
+BLOG_LIKE_TOKENS = [
+    "ブログ",
+    "コラム",
+    "記事",
+    "紹介",
+    "解説",
+    "口コミ",
+    "評判",
+    "ランキング",
+    "まとめ",
+    "料金・口コミ",
+    "新たな冒険",
+    "魅力的な風景",
+    "living a simple life",
+]
+SCHOOL_TUTORING_MUSIC_TOKENS = [
+    "英会話",
+    "英語塾",
+    "英語の勉強",
+    "家庭教師",
+    "学習塾",
+    "小学生",
+    "中学生",
+    "高校生",
+    "受験",
+    "個別指導",
+    "ピアノ教室",
+    "音楽教室",
+    "キーボードスクール",
+    "ミュージックスクール",
+    "tutor",
+    "tutors",
+    "amazingtalker",
+    "rarejob",
+]
+OUT_OF_AREA_TOKENS = [
+    "京都・大阪",
+    "京都",
+    "大阪",
+    "大阪府",
+    "和泉市",
+    "東京都",
+    "渋谷区",
+    "六本木",
+    "北海道",
+]
+WEAK_DISPLAY_NAME_WARNING_TOKENS = [
+    "missing",
+    "domain_fallback",
+    "domain_label_name",
+    "slug_like_ascii_name",
+    "domain_like",
+    "category_only",
+    "title_or_location_noise",
+    "review_or_rating_noise",
+    "phone_or_address_noise",
+    "mojibake",
+]
+GENERIC_DISPLAY_NAME_TOKENS = [
+    "お悩み",
+    "特化したサロン",
+    "お探しの方",
+    "施術を受けられる",
+    "リピーター様",
+    "公式サイト",
+    "無料トライアル",
+    "情報共有コミュニティ",
+]
+MOJIBAKE_RE = re.compile(r"[ÃÂãåç]|(?:\x81|\x82|\x83|\x8c)|ä¸")
 SIMPLE_BUILDER_HOSTS = [
     "jimdo.com",
     "jimdofree.com",
@@ -294,6 +396,7 @@ SIMPLE_BUILDER_HOSTS = [
     "crayonsite.net",
     "crayonsite.com",
     "shopinfo.jp",
+    "themedia.jp",
 ]
 SIMPLE_BUILDER_TOKENS = [
     "jimdo",
@@ -313,6 +416,8 @@ SIMPLE_BUILDER_TOKENS = [
     "goope",
     "crayon.e-shops",
     "crayonsite",
+    "themedia.jp",
+    "themedia",
 ]
 EXTERNAL_BOOKING_HOSTS = [
     "appt.salondenet.jp",
@@ -565,6 +670,45 @@ def _domain_matches(domain: str, known_domains: Iterable[str]) -> bool:
 def _contains_any(text: str, tokens: Iterable[str]) -> bool:
     haystack = str(text or "").lower()
     return any(token.lower() in haystack for token in tokens)
+
+
+def _url_blob(*values: str) -> str:
+    parts: list[str] = []
+    for value in values:
+        parsed = urlparse(str(value or "").strip())
+        parts.extend([parsed.path or "", parsed.query or "", parsed.fragment or ""])
+    return " ".join(parts).lower()
+
+
+def _is_blog_like_page(domain: str, website: str, contact_url: str, text: str) -> bool:
+    if _host_matches(domain, BLOG_LIKE_HOSTS) or _host_matches(_host(website), BLOG_LIKE_HOSTS):
+        return True
+    path_blob = _url_blob(website, contact_url)
+    return _contains_any(path_blob, BLOG_LIKE_PATH_TOKENS) and _contains_any(text, BLOG_LIKE_TOKENS)
+
+
+def _is_non_target_site(domain: str, website: str, contact_url: str) -> bool:
+    return any(_host_matches(value, NON_TARGET_HOSTS) for value in (domain, _host(website), _host(contact_url)) if value)
+
+
+def _is_school_tutoring_music_page(text: str) -> bool:
+    return _contains_any(text, SCHOOL_TUTORING_MUSIC_TOKENS)
+
+
+def _is_out_of_area_page(text: str) -> bool:
+    return _contains_any(text, OUT_OF_AREA_TOKENS)
+
+
+def _has_weak_display_name(row: dict[str, str], name_rank: int, min_name_rank: int) -> bool:
+    display = row.get("display_name", "")
+    warning = row.get("name_warning", "")
+    if name_rank < min_name_rank:
+        return True
+    if _contains_any(warning, WEAK_DISPLAY_NAME_WARNING_TOKENS):
+        return True
+    if _contains_any(display, GENERIC_DISPLAY_NAME_TOKENS):
+        return True
+    return bool(MOJIBAKE_RE.search(str(display or "")))
 
 
 def _has_local_service_signal(text: str) -> bool:
@@ -1197,6 +1341,11 @@ def _evaluate_row(
     portal_text = _contains_any(text, PORTAL_TOKENS)
     strict_portal_text = _contains_any(text, STRICT_PORTAL_TOKENS)
     portal_listing = portal_host or (portal_text and (not simple_builder or strict_portal_text))
+    blog_like = _is_blog_like_page(domain, website, contact_url, text)
+    non_target_site = _is_non_target_site(domain, website, contact_url)
+    school_tutoring_music = _is_school_tutoring_music_page(text)
+    out_of_area = _is_out_of_area_page(location_text)
+    weak_display_name = _has_weak_display_name(row, name_rank, min_name_rank)
     unsuitable_content = _contains_any(text, UNSUITABLE_TOKENS)
     external_contact = bool(explicit_contact and contact_host and domain and not _same_site(contact_host, domain))
     external_reservation_contact = bool(
@@ -1267,6 +1416,16 @@ def _evaluate_row(
         issues.append("line_or_sns")
     if portal_listing:
         issues.append("portal_listing")
+    if blog_like:
+        issues.append("blog_like")
+    if non_target_site:
+        issues.append("non_target_site")
+    if school_tutoring_music:
+        issues.append("school_tutoring_music")
+    if out_of_area:
+        issues.append("out_of_area")
+    if weak_display_name:
+        issues.append("weak_display_name")
     if simple_builder:
         issues.append("simple_builder_site")
     if unsuitable_content:
@@ -1316,6 +1475,16 @@ def _evaluate_row(
         quality_score -= 40
     if portal_listing:
         quality_score -= 35
+    if blog_like:
+        quality_score -= 60
+    if non_target_site:
+        quality_score -= 100
+    if school_tutoring_music:
+        quality_score -= 60
+    if out_of_area:
+        quality_score -= 70
+    if weak_display_name:
+        quality_score -= 20
     if external_reservation_contact:
         quality_score -= 30
     if simple_builder:
@@ -1351,6 +1520,16 @@ def _evaluate_row(
         exclusion_reasons.append("line_or_sns")
     if portal_listing and not allow_portal_listing:
         exclusion_reasons.append("portal_listing")
+    if blog_like:
+        exclusion_reasons.append("blog_like")
+    if non_target_site:
+        exclusion_reasons.append("non_target_site")
+    if school_tutoring_music:
+        exclusion_reasons.append("school_tutoring_music")
+    if out_of_area:
+        exclusion_reasons.append("out_of_area")
+    if weak_display_name:
+        exclusion_reasons.append("weak_display_name")
     if unsuitable_content:
         exclusion_reasons.append("unsuitable_content")
     if weak_contact and not allow_weak_contact:
@@ -1379,6 +1558,14 @@ def _evaluate_row(
         hard_exclusion_reasons.append("line_or_sns")
     if portal_listing and not allow_portal_listing:
         hard_exclusion_reasons.append("portal_listing")
+    if blog_like:
+        hard_exclusion_reasons.append("blog_like")
+    if non_target_site:
+        hard_exclusion_reasons.append("non_target_site")
+    if school_tutoring_music:
+        hard_exclusion_reasons.append("school_tutoring_music")
+    if out_of_area:
+        hard_exclusion_reasons.append("out_of_area")
     if unsuitable_content:
         hard_exclusion_reasons.append("unsuitable_content")
     if non_web_contact:
@@ -1415,6 +1602,8 @@ def _evaluate_row(
         review_reasons.append("low_name_confidence")
     elif name_rank < min_name_rank and row["name_confidence"].lower() != "medium":
         review_reasons.append("low_name_confidence")
+    if weak_display_name:
+        review_reasons.append("weak_display_name")
     if quality_score < min_quality_score:
         review_reasons.append("below_min_quality_score")
     if not location_match:

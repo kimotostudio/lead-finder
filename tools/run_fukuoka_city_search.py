@@ -16,6 +16,7 @@ import hashlib
 import json
 import logging
 import random
+import re
 import time
 from collections import Counter
 from datetime import datetime
@@ -63,6 +64,8 @@ LINE_PATTERNS = ("line.me", "lin.ee", "line://", "友だち追加")
 OUTPUT_COLUMNS = [
     "domain",
     "url",
+    "display_name",
+    "site_name",
     "title",
     "category_guess",
     "has_contact_page",
@@ -71,12 +74,32 @@ OUTPUT_COLUMNS = [
     "form_url",
     "has_line",
     "address",
+    "contact_fetch_status",
+    "contact_page_title",
+    "contact_page_address",
+    "contact_page_has_form",
+    "form_evidence_kind",
     "area_guess",
     "score",
     "solo_score",
     "reason",
 ]
 
+FUKUOKA_CITY_WARDS = (
+    "中央区",
+    "博多区",
+    "東区",
+    "南区",
+    "西区",
+    "城南区",
+    "早良区",
+)
+
+LOCAL_ADDRESS_RE = re.compile(
+    r"(?:〒\s*\d{3}-?\d{4}\s*)?(?:福岡県\s*)?福岡市\s*(?:"
+    + "|".join(re.escape(ward) for ward in FUKUOKA_CITY_WARDS)
+    + r")[^\n\r。|｜]{0,80}"
+)
 
 def load_search_config(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text(encoding="utf-8"))
@@ -110,7 +133,17 @@ def _dedupe_preserve_order(values: list[str]) -> list[str]:
 
 def _query_contains_negative(query: str, negatives: list[str]) -> bool:
     q = query.lower()
-    return any(n.lower() in q for n in negatives if n)
+    for negative in negatives:
+        token = str(negative or "").strip().lower()
+        if not token:
+            continue
+        for match in re.finditer(re.escape(token), q):
+            segment_start = max(q.rfind(sep, 0, match.start()) for sep in (" ", "\t", "\n", "\r")) + 1
+            segment_prefix = q[segment_start : match.start()].strip()
+            if segment_prefix.startswith(("-", "−")):
+                continue
+            return True
+    return False
 
 
 def _passes_required_markers(query: str, required_markers: Any) -> bool:
@@ -243,6 +276,167 @@ def _find_first_link(soup: Any, base_url: str, patterns: tuple[str, ...]) -> str
     return ""
 
 
+def _page_text(soup: Any) -> str:
+    if soup is None:
+        return ""
+    for tag in soup(["script", "style", "noscript"]):
+        tag.decompose()
+    return re.sub(r"\s+", " ", soup.get_text(" ", strip=True)).strip()
+
+
+def _meta_content(soup: Any, *names: str) -> str:
+    if soup is None:
+        return ""
+    for name in names:
+        for attr in ("property", "name", "itemprop"):
+            tag = soup.find("meta", attrs={attr: name})
+            if tag:
+                content = str(tag.get("content") or "").strip()
+                if content:
+                    return content
+    return ""
+
+
+def _jsonld_names(soup: Any) -> list[str]:
+    if soup is None:
+        return []
+    names: list[str] = []
+    for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        raw = script.string or script.get_text("", strip=True)
+        if not raw:
+            continue
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        stack = parsed if isinstance(parsed, list) else [parsed]
+        while stack:
+            item = stack.pop(0)
+            if isinstance(item, list):
+                stack.extend(item)
+                continue
+            if not isinstance(item, dict):
+                continue
+            type_text = " ".join(str(x) for x in item.get("@type", []) if x) if isinstance(item.get("@type"), list) else str(item.get("@type", ""))
+            if any(token in type_text.lower() for token in ("localbusiness", "organization", "professionalservice")):
+                name = str(item.get("name") or "").strip()
+                if name:
+                    names.append(name)
+            graph = item.get("@graph")
+            if isinstance(graph, list):
+                stack.extend(graph)
+    return names
+
+
+def _clean_candidate_name(value: str) -> str:
+    text = str(value or "").replace("\ufeff", "").replace("\u200b", "")
+    text = re.sub(r"\s+", " ", text).strip(" -_|｜:：／/")
+    text = re.sub(r"^(?:公式|公式サイト|ホームページ|HOME|トップ)\s*[:：|｜-]?\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*(?:公式サイト|公式ホームページ|ホームページ|Official Site)$", "", text, flags=re.IGNORECASE)
+    if "|" in text or "｜" in text:
+        parts = [p.strip(" -_/:：") for p in re.split(r"[|｜]", text) if p.strip(" -_/:：")]
+        if parts:
+            text = min(parts, key=len)
+    return text.strip()
+
+
+def _looks_like_business_name(value: str) -> bool:
+    text = _clean_candidate_name(value)
+    if len(text) < 2 or len(text) > 36:
+        return False
+    lowered = text.lower()
+    noisy = (
+        "お問い合わせ",
+        "問合せ",
+        "会社概要",
+        "アクセス",
+        "ブログ",
+        "福岡市",
+        "ランキング",
+        "比較",
+        "一覧",
+    )
+    if any(token.lower() in lowered for token in noisy):
+        return False
+    return True
+
+
+def _extract_site_name(soup: Any, title: str) -> str:
+    candidates: list[str] = []
+    candidates.append(_meta_content(soup, "og:site_name", "application-name", "twitter:site"))
+    candidates.extend(_jsonld_names(soup))
+    if soup is not None:
+        h1 = soup.find("h1")
+        if h1:
+            candidates.append(h1.get_text(" ", strip=True))
+    candidates.extend(_title_name_variants(title))
+    for candidate in candidates:
+        cleaned = _clean_candidate_name(candidate)
+        if _looks_like_business_name(cleaned):
+            return cleaned
+    return ""
+
+
+def _title_name_variants(title: str) -> list[str]:
+    text = str(title or "").strip()
+    if not text:
+        return []
+    parts = [_clean_candidate_name(text)]
+    parts.extend(_clean_candidate_name(part) for part in re.split(r"[|｜│/／]| - ", text) if part.strip())
+    return [part for part in parts if part]
+
+
+def _extract_local_address(text: str) -> str:
+    haystack = re.sub(r"\s+", " ", str(text or ""))
+    match = LOCAL_ADDRESS_RE.search(haystack)
+    if match:
+        return match.group(0).strip(" 、,")
+    for ward in FUKUOKA_CITY_WARDS:
+        token = f"福岡市{ward}"
+        if token in haystack:
+            return token
+    return ""
+
+
+def _same_site_url(url: str, domain: str) -> bool:
+    host = urlparse(str(url or "")).netloc.lower().removeprefix("www.")
+    target = str(domain or "").lower().removeprefix("www.")
+    return bool(host and target and (host == target or host.endswith(f".{target}") or target.endswith(f".{host}")))
+
+
+def _fetch_same_site_contact_evidence(contact_url: str, domain: str, *, timeout: int = 10) -> dict[str, str]:
+    if not contact_url.startswith(("http://", "https://")) or not _same_site_url(contact_url, domain):
+        return {}
+    try:
+        import requests
+
+        response = requests.get(
+            contact_url,
+            timeout=timeout,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; LeadFinderEvidence/1.0)"},
+        )
+        if response.status_code >= 400:
+            return {"contact_fetch_status": str(response.status_code)}
+        html = response.text or ""
+    except Exception as exc:  # pragma: no cover - network defensive path
+        return {"contact_fetch_error": exc.__class__.__name__}
+    if BeautifulSoup is not None:
+        soup = BeautifulSoup(html, "html.parser")
+    else:
+        soup = None
+    text = _page_text(soup)
+    title = ""
+    if soup is not None and soup.title:
+        title = soup.title.get_text(" ", strip=True)
+    has_form = bool("<form" in html.lower())
+    return {
+        "contact_fetch_status": "200",
+        "contact_page_title": title,
+        "contact_page_address": _extract_local_address(text),
+        "contact_page_has_form": str(has_form),
+    }
+
+
 def _extract_output_row(lead: dict[str, Any], areas: list[str]) -> dict[str, Any]:
     url = str(lead.get("url", ""))
     title = str(lead.get("title", "") or "")
@@ -254,9 +448,36 @@ def _extract_output_row(lead: dict[str, Any], areas: list[str]) -> dict[str, Any
 
     contact_url = _find_first_link(soup, url, CONTACT_PATTERNS)
     form_url = _find_first_link(soup, url, FORM_PATTERNS)
-    has_form = bool(form_url) or ("<form" in html.lower())
+    homepage_has_form = "<form" in html.lower()
+    has_form = homepage_has_form
+    page_text = _page_text(soup)
+    site_name = _extract_site_name(soup, title)
+    contact_evidence = _fetch_same_site_contact_evidence(contact_url, str(lead.get("domain", ""))) if contact_url else {}
+    contact_page_has_form = str(contact_evidence.get("contact_page_has_form", "")).lower()
+    if contact_page_has_form == "true":
+        has_form = True
+        form_url = contact_url
+        form_evidence_kind = "confirmed_same_site_contact_page_form"
+    elif contact_page_has_form == "false":
+        has_form = False
+        form_evidence_kind = "confirmed_same_site_contact_page_no_form"
+    elif homepage_has_form:
+        form_url = form_url or url
+        form_evidence_kind = "home_page_form_detected"
+    elif form_url:
+        form_evidence_kind = "form_like_link_unconfirmed"
+    else:
+        form_evidence_kind = ""
+    address = (
+        str(lead.get("address", "") or "").strip()
+        or contact_evidence.get("contact_page_address", "")
+        or _extract_local_address(page_text)
+        or _extract_local_address(title)
+    )
 
     blob = f"{url} {title} {lead.get('visible_text', '')} {lead.get('address', '')}"
+    if contact_evidence:
+        blob = " ".join([blob, contact_evidence.get("contact_page_title", ""), contact_evidence.get("contact_page_address", "")])
     blob_l = blob.lower()
     has_line = any(p in blob_l for p in LINE_PATTERNS)
 
@@ -278,6 +499,8 @@ def _extract_output_row(lead: dict[str, Any], areas: list[str]) -> dict[str, Any
     return {
         "domain": str(lead.get("domain", "")),
         "url": url,
+        "display_name": site_name,
+        "site_name": site_name,
         "title": title,
         "category_guess": category_guess,
         "has_contact_page": bool(contact_url),
@@ -285,11 +508,16 @@ def _extract_output_row(lead: dict[str, Any], areas: list[str]) -> dict[str, Any
         "has_form": bool(has_form),
         "form_url": form_url,
         "has_line": bool(has_line),
-        "address": str(lead.get("address", "")),
+        "address": address,
+        "contact_fetch_status": contact_evidence.get("contact_fetch_status", ""),
+        "contact_page_title": contact_evidence.get("contact_page_title", ""),
+        "contact_page_address": contact_evidence.get("contact_page_address", ""),
+        "contact_page_has_form": contact_evidence.get("contact_page_has_form", ""),
+        "form_evidence_kind": form_evidence_kind,
         "area_guess": area_guess or str(lead.get("city", "")),
         "score": lead.get("score", ""),
         "solo_score": solo_score,
-        "reason": " | ".join(reason_tokens),
+        "reason": " | ".join(reason_tokens + [f"{k}={v}" for k, v in contact_evidence.items() if v]),
     }
 
 

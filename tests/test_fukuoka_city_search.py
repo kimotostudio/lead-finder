@@ -6,6 +6,7 @@ from pathlib import Path
 from tools.run_fukuoka_city_search import (
     apply_query_filters,
     build_fukuoka_queries,
+    _extract_output_row,
     load_search_config,
     sort_urls_deterministically,
 )
@@ -61,6 +62,35 @@ class FukuokaCitySearchTests(unittest.TestCase):
             required_markers={"regional": ["中央区"], "business": ["整体"], "solo": ["自宅サロン"]},
         )
         self.assertEqual(filtered, ["福岡市 中央区 整体 自宅サロン お問い合わせフォーム"])
+
+    def test_extract_output_row_preserves_local_service_evidence(self) -> None:
+        lead = {
+            "domain": "tanaka-repair.example.jp",
+            "url": "https://tanaka-repair.example.jp/",
+            "title": "田中住宅修理｜福岡市中央区の水道修理",
+            "html": """
+                <html>
+                  <head><meta property="og:site_name" content="田中住宅修理"></head>
+                  <body>
+                    <h1>田中住宅修理</h1>
+                    <p>福岡市中央区薬院1-1-1</p>
+                    <a href="/contact/">お問い合わせフォーム</a>
+                    <form><input name="name"><textarea name="message"></textarea></form>
+                  </body>
+                </html>
+            """,
+            "visible_text": "福岡市中央区薬院1-1-1 お問い合わせフォーム 水道修理",
+            "business_type": "水道修理",
+            "score": 70,
+        }
+
+        row = _extract_output_row(lead, ["中央区"])
+
+        self.assertEqual(row["display_name"], "田中住宅修理")
+        self.assertEqual(row["site_name"], "田中住宅修理")
+        self.assertEqual(row["contact_url"], "https://tanaka-repair.example.jp/contact/")
+        self.assertTrue(row["has_form"])
+        self.assertIn("福岡市中央区", row["address"])
 
 
 if __name__ == "__main__":
