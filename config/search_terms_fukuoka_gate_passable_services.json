@@ -1,0 +1,257 @@
+{
+  "profile_name": "fukuoka_gate_passable_services_20260602",
+  "purpose": "Category-pivoted lead supply profile for gate-passable local businesses with plain contact forms.",
+  "city": "福岡市",
+  "prefecture": "福岡県",
+  "hard_geo": {
+    "query_required_tokens": [
+      "福岡市"
+    ],
+    "row_required_tokens": [
+      "福岡",
+      "福岡市",
+      "福岡県"
+    ],
+    "out_of_area_tokens": [
+      "東京",
+      "東京都",
+      "大阪",
+      "大阪府",
+      "関西",
+      "京都",
+      "兵庫",
+      "神戸",
+      "名古屋",
+      "愛知",
+      "横浜",
+      "神奈川",
+      "千葉",
+      "埼玉",
+      "北海道",
+      "沖縄",
+      "United Kingdom"
+    ]
+  },
+  "target_categories": {
+    "include": [
+      "工務店",
+      "リフォーム",
+      "住宅設備",
+      "設備工事",
+      "電気工事",
+      "水道工事",
+      "水道修理",
+      "行政書士",
+      "税理士",
+      "社会保険労務士",
+      "社労士",
+      "司法書士",
+      "看板製作",
+      "印刷会社",
+      "製本",
+      "清掃会社",
+      "害虫駆除",
+      "鍵修理",
+      "時計修理",
+      "靴修理"
+    ],
+    "exclude": [
+      "サロン",
+      "プライベートサロン",
+      "リラクゼーション",
+      "アロマ",
+      "エステ",
+      "ネイル",
+      "まつげ",
+      "眉毛",
+      "ヨガ",
+      "ピラティス",
+      "整体",
+      "鍼灸",
+      "整骨",
+      "占い",
+      "ヒーリング",
+      "女性専用",
+      "バスト",
+      "学校",
+      "スクール",
+      "教室",
+      "学習塾",
+      "英会話",
+      "音楽教室"
+    ]
+  },
+  "contact_intent": {
+    "prefer": [
+      "お問い合わせ",
+      "お問い合わせフォーム",
+      "問い合わせ",
+      "相談フォーム",
+      "contact",
+      "inquiry"
+    ],
+    "avoid": [
+      "予約",
+      "予約フォーム",
+      "ネット予約",
+      "オンライン予約",
+      "ご予約",
+      "LINE予約",
+      "来店日時",
+      "希望日時"
+    ]
+  },
+  "source_preference": {
+    "prefer": [
+      "own_domain_same_site_contact"
+    ],
+    "deprioritized_hosts": [
+      "jimdofree.com",
+      "jimdo.com",
+      "amebaownd.com",
+      "ownd.jp",
+      "wixsite.com",
+      "wix.com",
+      "peraichi.com",
+      "stores.jp",
+      "thebase.in",
+      "base.shop",
+      "crayonsite.info",
+      "crayonsite.net",
+      "crayon.e-shops.jp",
+      "goope.jp"
+    ],
+    "deprioritized_tlds": [
+      ".xyz"
+    ],
+    "aggregator_hosts": [
+      "hotpepper.jp",
+      "hotpepperbeauty.jp",
+      "beauty.hotpepper.jp",
+      "ekiten.jp",
+      "epark.jp",
+      "itp.ne.jp",
+      "townpage.goo.ne.jp",
+      "loco.yahoo.co.jp",
+      "google.com",
+      "google.co.jp",
+      "maps.google.com",
+      "mapion.co.jp"
+    ],
+    "external_contact_hosts": [
+      "ssl.form-mailer.jp",
+      "form-mailer.jp",
+      "form.run",
+      "tayori.com",
+      "select-type.com",
+      "reserva.be",
+      "reserva.jp",
+      "airrsv.net",
+      "coubic.com",
+      "bit.ly",
+      "tinyurl.com",
+      "goo.gl",
+      "lin.ee",
+      "lit.link",
+      "linktr.ee"
+    ]
+  },
+  "ledger_policy": {
+    "exclude_already_touched": true,
+    "match_fields": [
+      "lead_id",
+      "domain"
+    ]
+  },
+  "required_markers": {
+    "geo": [
+      "福岡市"
+    ],
+    "business": [
+      "工務店",
+      "リフォーム",
+      "住宅設備",
+      "設備工事",
+      "電気工事",
+      "水道工事",
+      "水道修理",
+      "行政書士",
+      "税理士",
+      "社会保険労務士",
+      "社労士",
+      "司法書士",
+      "看板製作",
+      "印刷会社",
+      "製本",
+      "清掃会社",
+      "害虫駆除",
+      "鍵修理",
+      "時計修理",
+      "靴修理"
+    ],
+    "contact": [
+      "お問い合わせ",
+      "お問い合わせフォーム",
+      "問い合わせ",
+      "相談フォーム",
+      "contact",
+      "inquiry"
+    ]
+  },
+  "negatives": [
+    "予約",
+    "予約フォーム",
+    "ネット予約",
+    "オンライン予約",
+    "LINE予約",
+    "サロン",
+    "リラクゼーション",
+    "アロマ",
+    "エステ",
+    "ネイル",
+    "まつげ",
+    "眉毛",
+    "ヨガ",
+    "ピラティス",
+    "整体",
+    "鍼灸",
+    "整骨",
+    "占い",
+    "ヒーリング",
+    "女性専用",
+    "バスト",
+    "学校",
+    "スクール",
+    "教室",
+    "学習塾",
+    "英会話",
+    "音楽教室"
+  ],
+  "queries": [
+    "福岡市中央区 行政書士事務所 お問い合わせフォーム 公式サイト -行政書士法人 -株式会社 -合同会社 -予約 -予約フォーム -求人 -採用 -ランキング -一覧 -ポータル -Instagram -LINE -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市中央区 司法書士事務所 お問い合わせフォーム 公式サイト -司法書士法人 -株式会社 -合同会社 -予約 -予約フォーム -求人 -採用 -ランキング -一覧 -ポータル -Instagram -LINE -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市中央区 税理士事務所 お問い合わせフォーム 公式サイト -税理士法人 -株式会社 -合同会社 -予約 -予約フォーム -求人 -採用 -ランキング -比較 -ポータル -Instagram -LINE -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市 工務店 お問い合わせフォーム 公式 -予約 -予約フォーム -ホットペッパー -Instagram -LINE -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市 リフォーム お問い合わせ 公式サイト -予約 -予約フォーム -ランキング -一覧 -ポータル -Instagram -LINE -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市 住宅設備 お問い合わせフォーム 公式 -予約 -ネット予約 -求人 -採用 -ランキング -ポータル -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市 電気工事 お問い合わせ 公式サイト -予約 -予約フォーム -求人 -採用 -ランキング -一覧 -ポータル -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市 水道修理 お問い合わせフォーム 公式 -予約 -ネット予約 -ランキング -比較 -ポータル -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市 行政書士 お問い合わせフォーム 公式サイト -予約 -ネット予約 -求人 -採用 -ランキング -一覧 -ポータル -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市 税理士 お問い合わせ 公式サイト -予約 -予約フォーム -求人 -採用 -ランキング -比較 -ポータル -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市 社会保険労務士 お問い合わせフォーム 公式 -予約 -ネット予約 -求人 -採用 -ランキング -比較 -ポータル -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市 司法書士 お問い合わせ 公式サイト -予約 -予約フォーム -求人 -採用 -ランキング -一覧 -ポータル -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市 看板製作 お問い合わせフォーム 公式 -予約 -ネット予約 -求人 -採用 -ランキング -一覧 -ポータル -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市 印刷会社 お問い合わせ 公式サイト -予約 -予約フォーム -求人 -採用 -ランキング -比較 -ポータル -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市 清掃会社 お問い合わせフォーム 公式 -予約 -ネット予約 -求人 -採用 -ランキング -一覧 -ポータル -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市 鍵修理 お問い合わせ 公式サイト -予約 -予約フォーム -ランキング -比較 -ポータル -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市 時計修理 お問い合わせフォーム 公式 -予約 -ネット予約 -ランキング -一覧 -ポータル -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz",
+    "福岡市 靴修理 お問い合わせ 公式サイト -予約 -予約フォーム -ランキング -一覧 -ポータル -学校 -スクール -教室 -site:jimdofree.com -site:amebaownd.com -site:wixsite.com -site:*.xyz"
+  ],
+  "max_queries_default": 15,
+  "max_results_per_query_default": 4,
+  "parallel_workers_default": 1,
+  "sleep_sec_between_queries_default": 2.0,
+  "max_empty_queries_default": 8,
+  "max_process_urls_default": 60,
+  "seed": 20260602
+}
